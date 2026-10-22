@@ -8,8 +8,8 @@ struct ConnectionView: View {
         VStack(alignment: .leading, spacing: 22) {
             HStack {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("Connections").font(.system(size: 23, weight: .semibold, design: .rounded))
-                    Text("Your devices, close at hand.").font(.system(size: 12)).foregroundStyle(GlowTheme.muted)
+                    Text("Connections").font(.system(size: 23, weight: .semibold))
+                    Text("Television & soundbar").font(.system(size: 12)).foregroundStyle(GlowTheme.muted)
                 }
                 Spacer()
                 RoundControl(symbol: "xmark", label: "Close connections") { dismiss() }
@@ -50,6 +50,6 @@ struct ConnectionView: View {
                 .font(.system(size: 11)).foregroundStyle(GlowTheme.muted).fixedSize(horizontal: false, vertical: true)
         }
         .padding(28).frame(idealWidth: 420)
-        .background(GlowTheme.background).foregroundStyle(GlowTheme.ink).tint(GlowTheme.lime).preferredColorScheme(.dark)
+        .background(GlowTheme.background).foregroundStyle(GlowTheme.ink).tint(GlowTheme.accent).preferredColorScheme(.dark)
     }
 }

@@ -1,7 +1,7 @@
 # TV Glow project instructions
 
 - Commit each completed, reviewable change and immediately push that commit to `origin`. A local commit alone does not complete a step. Report any push failure clearly and resolve it when possible.
-- Repository: `https://github.com/annetwhatever-dot/tv.git`. The existing remote uses Anna’s SSH authentication for pushes.
+- Repository: `https://github.com/wowlocal/my-tv.git`. Push completed changes to this repository through `origin`.
 - Prioritize the native macOS SwiftUI app. Do not download iOS platforms or bootstrap a simulator unless Anna asks. Keep shared code suitable for a later iOS version.
 - The app controls an LG C1 OLED and a Living Room Sonos Arc Ultra directly on the local network. Preserve independent TV and soundbar operation, live readback, and Keychain pairing storage.
 - Opening, reconnecting and refreshing must only read device settings. Never apply a preset automatically.

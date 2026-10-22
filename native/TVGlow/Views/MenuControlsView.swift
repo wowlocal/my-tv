@@ -9,14 +9,14 @@ struct MenuControlsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
-                Label("TV Glow", systemImage: "sun.max.fill").foregroundStyle(GlowTheme.lime)
+                Label("TV Glow", systemImage: "sun.max.fill").foregroundStyle(GlowTheme.accent)
                 Spacer()
                 Button { openWindow(id: "main"); NSApp.activate(ignoringOtherApps: true) } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }
                     .buttonStyle(.plain).help("Open TV Glow")
             }
             VStack(alignment: .leading, spacing: 8) {
                 HStack { Text("Brightness"); Spacer(); Text(store.brightness.map { "\($0)%" } ?? "Offline").monospacedDigit() }
-                Slider(value: $store.brightnessDraft, in: 0...100, step: 1) { editing in
+                Slider(value: $store.brightnessDraft, in: 0...100) { editing in
                     store.editingBrightness = editing
                     if !editing { Task { await store.setBrightness(Int(store.brightnessDraft)) } }
                 }.disabled(!store.tvConnected || store.applyingBrightness || store.tvPowerBusy).accessibilityLabel("TV brightness")
@@ -32,7 +32,7 @@ struct MenuControlsView: View {
                     Button { Task { await store.toggleMute() } } label: { Image(systemName: store.muted ? "speaker.slash" : "speaker.wave.2") }
                         .buttonStyle(.plain).disabled(!store.sonosConnected || store.applyingVolume).help(store.muted ? "Unmute Sonos" : "Mute Sonos")
                 }
-                Slider(value: $store.volumeDraft, in: 0...100, step: 1) { editing in
+                Slider(value: $store.volumeDraft, in: 0...100) { editing in
                     store.editingVolume = editing
                     if !editing { Task { await store.setVolume(Int(store.volumeDraft)) } }
                 }.disabled(!store.sonosConnected || store.applyingVolume).accessibilityLabel("Sonos volume")
@@ -56,7 +56,7 @@ struct MenuControlsView: View {
             }.font(.system(size: 10))
         }
         .font(.system(size: 12)).padding(20).frame(width: 290)
-        .background(GlowTheme.background).foregroundStyle(GlowTheme.ink).tint(GlowTheme.lime).preferredColorScheme(.dark)
+        .background(GlowTheme.background).foregroundStyle(GlowTheme.ink).tint(GlowTheme.accent).preferredColorScheme(.dark)
         .task { store.start() }
     }
 }

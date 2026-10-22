@@ -1,6 +1,10 @@
 # TV Glow — native Apple apps
 
-The macOS SwiftUI app controls Anna’s LG C1 OLED brightness and Sonos Arc Ultra volume directly over the home network. It has a main window, a menu-bar panel, brightness presets, precise +/- controls, volume/mute, a standalone Apple TV remote, and TV power buttons. The native apps do not use the Python/web server.
+The macOS SwiftUI app controls Anna’s LG C1 OLED brightness and Sonos Arc Ultra volume directly over the home network. Its compact, monochrome window follows the Apple TV Remote layout: a large touch surface, circular Back / Home / Play-Pause buttons, and independent Sonos volume and LG brightness controls below. The menu-bar panel provides quick controls. The native apps do not use the Python/web server.
+
+![Remote interface](docs/remote-interface.png)
+
+Interface preview rendered from the native SwiftUI views with fake devices. The redesign was checked at 440 × 800 and 380 × 640 points, including connected and disconnected Apple TV states. On this Mac, native window automation returns `cgWindowNotFound`, so installed-window interaction still needs a manual check.
 
 The installed Mac app is `/Users/anna/Applications/TV Glow.app`. Open it from Finder, Spotlight or Launchpad. Click the sun in the menu bar for quick controls. **Connections** lets you update each device’s IP address or forget this app’s TV pairing.
 
@@ -36,13 +40,15 @@ Tests use fake devices and never change real brightness, volume or mute. They co
 
 ## Apple TV remote
 
-The middle card discovers Apple TVs through Bonjour. Choose a device, click **Connect**, and enter the four-digit code displayed on the TV. Release pairing credentials are stored in this app’s own Keychain namespace; Debug uses its private development file store. Opening the app discovers devices without automatically connecting or sending remote commands.
+Click the device name at the top of the remote (or **Connect Apple TV** on the touch surface) to choose a Bonjour-discovered Apple TV. Click **Connect** and enter the four-digit code displayed on the TV. Release pairing credentials are stored in this app’s own Keychain namespace; Debug uses its private development file store. Opening the app discovers devices without automatically connecting or sending remote commands.
 
-The remote includes a direction pad, Select, Back, Home and Play/Pause. Click the pad to use arrow keys, Return, Space and Escape. Text entry is available when a search/text field is focused on Apple TV. Menu-bar controls include Back, Play/Pause and Home after connecting. This is our own native remote using community Companion/MRP protocol implementations, rather than an embedded system iPhone Remote. Siri voice and Apple’s Control Center interface are not included. The Dev app has paired successfully with Anna’s Apple TV named `tv`. Anna confirmed that the TV power-on action worked through the paired Apple TV. Navigation/playback/text commands still need separate user-visible checks; unit tests use fakes.
+Swipe or drag across the touch surface to navigate; click to select. Longer drags repeat navigation, and releasing a swipe never selects an item. Discrete arrow buttons remain at the edges of the surface. Click the pad to use arrow keys, Return, Space and Escape. The keyboard button at the top left opens text entry when a search/text field is focused on Apple TV. The top-right power button opens LG power controls. Click **Brightness** for the Night / Everyday / Bright presets, and **Connections** at the bottom for device addresses, pairing and detailed connection status. Sonos and brightness controls operate independently of the Apple TV connection.
+
+Menu-bar controls include Back, Play/Pause and Home after connecting. This is our own native remote using community Companion/MRP protocol implementations, rather than an embedded system iPhone Remote. Siri voice and Apple’s Control Center interface are not included. The Dev app has paired successfully with Anna’s Apple TV named `tv`. Anna confirmed that the TV power-on action worked through the paired Apple TV. Navigation/playback/text commands still need separate user-visible checks; unit tests use fakes.
 
 ## TV power
 
-**Turn on** and **Turn off** are at the top of the LG card and in the menu-bar panel. Off sends LG’s `system/turnOff` command and reports whether the TV acknowledged it. On sends a Wake-on-LAN packet to the configured LG address and the local broadcast address. If **Also wake connected Apple TV (HDMI-CEC)** is enabled in Connections, it also sends Apple TV’s Wake command. Pair/connect Apple TV before using this route. Anna confirmed this power-on action worked.
+**Turn on** and **Turn off** are in the remote’s top-right power popover and in the menu-bar panel. Off sends LG’s `system/turnOff` command and reports whether the TV acknowledged it. On sends a Wake-on-LAN packet to the configured LG address and the local broadcast address. If **Also wake connected Apple TV (HDMI-CEC)** is enabled in Connections, it also sends Apple TV’s Wake command. Pair/connect Apple TV before using this route. Anna confirmed this power-on action worked.
 
 Connections includes the TV’s wired MAC (`74:E6:B8:2D:7F:2C` by default). LG network wake requires **TV On with Mobile**; wake across routed subnets depends on the router. Apple TV wake needs HDMI-CEC / LG Simplink and **Control TVs and Receivers** on Apple TV. After wake, the app probes LG’s port and reads brightness when reconnecting. A sent wake packet alone is never shown as a confirmed TV connection. No brightness preset or volume change is applied by power actions.
 
@@ -60,7 +66,7 @@ The iOS target is groundwork, not yet delivered. This Mac currently reports that
 
 ## Verified on Anna’s devices
 
-The native release connected to both devices. A brightness command of 0% was accepted and read back as 0%. Sonos volume was lowered from 45 to 44 through the native app, then restored to 45 and read back. Live tests never increased TV brightness. Twenty macOS unit tests passed, including remote discovery without automatic commands, PIN validation, offline command guards, timeouts and isolated Keychain namespaces. Brightness fallback handles the C1’s 500/unsupported-key response to direct writes.
+The native release connected to both devices. A brightness command of 0% was accepted and read back as 0%. Sonos volume was lowered from 45 to 44 through the native app, then restored to 45 and read back. Live tests never increased TV brightness. Twenty-five macOS unit tests passed, including touch-surface tap/swipe handling, remote discovery without automatic commands, PIN validation, offline command guards, timeouts and isolated Keychain namespaces. Brightness fallback handles the C1’s 500/unsupported-key response to direct writes.
 
 ## Protocols and attribution
 

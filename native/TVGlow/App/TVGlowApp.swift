@@ -9,9 +9,11 @@ struct TVGlowApp: App {
     var body: some Scene {
         #if os(macOS)
         Window("TV Glow", id: "main") {
-            ContentView(store: store, remote: remote).frame(minWidth: 1020, idealWidth: 1100, maxWidth: 1240, minHeight: 610, idealHeight: 730)
+            ContentView(store: store, remote: remote)
+                .frame(minWidth: 380, idealWidth: 440, maxWidth: 520, minHeight: 640, idealHeight: 800)
         }
-        .defaultSize(width: 1100, height: 730)
+        .defaultSize(width: 440, height: 800)
+        .windowResizability(.contentSize)
         .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(after: .newItem) {

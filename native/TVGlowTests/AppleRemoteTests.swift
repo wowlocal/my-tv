@@ -1,6 +1,49 @@
 import XCTest
 import ItsytvCore
 
+final class RemoteTouchNavigationTests: XCTestCase {
+    func testTapSelectsAndSmallPointerMovementIsTolerated() {
+        var navigation = RemoteTouchNavigation()
+        XCTAssertNil(navigation.move(x: 3, y: -2))
+        XCTAssertEqual(navigation.end(x: 3, y: -2), .select)
+    }
+
+    func testSwipesFollowDominantAxisAndRepeatAfterFurtherMovement() {
+        var navigation = RemoteTouchNavigation()
+        XCTAssertNil(navigation.move(x: 20, y: 4))
+        XCTAssertEqual(navigation.move(x: 35, y: 8), .right)
+        XCTAssertNil(navigation.move(x: 50, y: 8))
+        XCTAssertEqual(navigation.move(x: 70, y: 8), .right)
+        XCTAssertEqual(navigation.move(x: 70, y: -30), .up)
+        XCTAssertEqual(navigation.move(x: 30, y: -30), .left)
+        XCTAssertEqual(navigation.move(x: 30, y: 10), .down)
+        XCTAssertNil(navigation.end(x: 30, y: 10))
+    }
+
+    func testDraggingBackToOriginDoesNotSelect() {
+        var navigation = RemoteTouchNavigation()
+        XCTAssertEqual(navigation.move(x: -40, y: 0), .left)
+        XCTAssertEqual(navigation.move(x: 0, y: 0), .right)
+        XCTAssertNil(navigation.end(x: 0, y: 0))
+        XCTAssertEqual(navigation.end(x: 0, y: 0), .select)
+    }
+
+    func testShortDragDoesNotAccidentallySelect() {
+        var navigation = RemoteTouchNavigation()
+        XCTAssertNil(navigation.move(x: 18, y: 2))
+        XCTAssertNil(navigation.end(x: 0, y: 0))
+        XCTAssertNil(navigation.end(x: 20, y: 0))
+    }
+
+    func testResetDiscardsInterruptedGesture() {
+        var navigation = RemoteTouchNavigation()
+        XCTAssertEqual(navigation.move(x: 40, y: 0), .right)
+        navigation.reset()
+        XCTAssertNil(navigation.move(x: 2, y: 0))
+        XCTAssertEqual(navigation.end(x: 2, y: 0), .select)
+    }
+}
+
 @MainActor
 final class MockAppleRemoteDriver: AppleRemoteDriving {
     var snapshot = AppleRemoteSnapshot(devices: [.init(id: "tv", name: "tv", model: "AppleTV14,1")])

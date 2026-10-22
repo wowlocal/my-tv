@@ -29,6 +29,6 @@ struct TVPowerControls: View {
         .font(.system(size: 11, weight: .medium)).buttonStyle(.plain)
         .background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(GlowTheme.line))
-        .foregroundStyle(GlowTheme.lime)
+        .foregroundStyle(GlowTheme.accent)
     }
 }

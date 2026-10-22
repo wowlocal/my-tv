@@ -26,6 +26,31 @@ enum AppleRemoteCommand: String, CaseIterable {
     case up, down, left, right, select, back, home, playPause, wake
 }
 
+/// Converts cumulative touch-surface translation into discrete remote presses.
+/// A drag can repeat navigation, but must never select an item on release.
+struct RemoteTouchNavigation {
+    private var anchorX = 0.0
+    private var anchorY = 0.0
+    private var travelled = false
+
+    mutating func move(x: Double, y: Double) -> AppleRemoteCommand? {
+        if max(abs(x), abs(y)) >= 12 { travelled = true }
+        let dx = x - anchorX, dy = y - anchorY
+        guard max(abs(dx), abs(dy)) >= 32 else { return nil }
+        anchorX = x; anchorY = y
+        return abs(dx) > abs(dy) ? (dx > 0 ? .right : .left) : (dy > 0 ? .down : .up)
+    }
+
+    mutating func end(x: Double, y: Double) -> AppleRemoteCommand? {
+        defer { reset() }
+        return !travelled && max(abs(x), abs(y)) < 12 ? .select : nil
+    }
+
+    mutating func reset() {
+        anchorX = 0; anchorY = 0; travelled = false
+    }
+}
+
 @MainActor
 protocol AppleRemoteDriving: AnyObject {
     var snapshot: AppleRemoteSnapshot { get }
