@@ -55,25 +55,34 @@ struct ContentView: View {
     }
 
     private var topBar: some View {
-        HStack(spacing: 14) {
+        GlassGroup(spacing: 14) { HStack(spacing: 14) {
             CircleButton(symbol: store.muted ? "speaker.slash.fill" : "speaker.slash", diameter: 50, highlighted: store.muted) {
                 feedback += 1
                 Task { await store.toggleMute() }
             }
             .disabled(!store.sonosConnected || store.applyingVolume)
             .opacity(store.sonosConnected ? 1 : 0.4)
+            .animation(.easeInOut(duration: 0.3), value: store.sonosConnected)
             .accessibilityLabel(store.muted ? "Unmute Sonos" : "Mute Sonos").accessibilityIdentifier("muteButton")
 
             Button { showingDevices = true } label: {
                 HStack(spacing: 8) {
                     TVBadge()
                     Text(deviceName).font(.system(size: 17, weight: .semibold)).lineLimit(1)
-                    Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(GlowTheme.muted)
+                        .contentTransition(.opacity)
+                    if remote.snapshot.phase.isBusy {
+                        ProgressView().controlSize(.small).tint(GlowTheme.muted)
+                            .transition(.opacity.combined(with: .scale(scale: 0.6)))
+                    } else {
+                        Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(GlowTheme.muted)
+                            .transition(.opacity.combined(with: .scale(scale: 0.6)))
+                    }
                 }
                 .opacity(remote.connected ? 1 : 0.55)
+                .animation(.snappy(duration: 0.3), value: remote.snapshot.phase)
+                .animation(.easeInOut(duration: 0.3), value: deviceName)
                 .padding(.horizontal, 16).frame(maxWidth: .infinity).frame(height: 50)
-                .background(RemoteChrome.fill, in: Capsule())
-                .overlay(Capsule().strokeBorder(RemoteChrome.stroke, lineWidth: 1))
+                .remoteGlass(Capsule(), interactive: true)
                 .contentShape(Capsule())
             }
             .buttonStyle(.plain)
@@ -83,14 +92,14 @@ struct ContentView: View {
                     .presentationCompactAdaptation(.popover)
             }
 
-            CircleButton(symbol: "power", diameter: 50, action: togglePower)
+            CircleButton(symbol: "power", diameter: 50, pulsing: store.tvPowerBusy, action: togglePower)
                 .disabled(store.tvPowerBusy)
                 .contextMenu {
                     Button("Turn On TV", systemImage: "power") { powerOn() }
                     Button("Turn Off TV", systemImage: "power.circle") { powerOff() }.disabled(!store.tvConnected)
                 }
                 .accessibilityLabel(store.tvConnected ? "Turn off TV" : "Turn on TV").accessibilityIdentifier("tvPowerMenuButton")
-        }
+        } }
     }
 
     // MARK: Power
@@ -155,18 +164,21 @@ struct ContentView: View {
                     let down = value.translation.height
                     if down > 30 && down > abs(value.translation.width) * 1.5 { setLevels(false) }
                 })
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                .transition(.asymmetric(
+                    insertion: .move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.94, anchor: .bottom)),
+                    removal: .move(edge: .bottom).combined(with: .opacity)))
             } else {
-                grabber
+                grabber.transition(.opacity)
             }
         }
         .animation(.easeOut(duration: 0.2), value: status)
+        .animation(RemoteChrome.reveal, value: showLevels)
     }
 
     private func setLevels(_ visible: Bool) {
         guard visible != showLevels else { return }
         feedback += 1
-        withAnimation(.snappy(duration: 0.28)) { showLevels = visible }
+        withAnimation(RemoteChrome.reveal) { showLevels = visible }
     }
 
     /// Sheet-style handle: pull up (or tap) to reveal the sliders, pull down to hide them.
@@ -186,12 +198,15 @@ struct ContentView: View {
     // MARK: Bottom buttons
 
     private var bottomButtons: some View {
-        HStack(spacing: 22) {
-            remoteButton("Play / pause", symbol: "playpause", command: .playPause, diameter: 77, glyph: 24)
-            remoteButton("Back", symbol: "chevron.left", command: .back, diameter: 100, glyph: 36)
-            remoteButton("Home", symbol: "tv", command: .home, diameter: 77, glyph: 24)
+        GlassGroup(spacing: 22) {
+            HStack(spacing: 22) {
+                remoteButton("Play / pause", symbol: "playpause", command: .playPause, diameter: 77, glyph: 24)
+                remoteButton("Back", symbol: "chevron.left", command: .back, diameter: 100, glyph: 36)
+                remoteButton("Home", symbol: "tv", command: .home, diameter: 77, glyph: 24)
+            }
         }
         .disabled(!remote.connected).opacity(remote.connected ? 1 : 0.4)
+        .animation(.easeInOut(duration: 0.3), value: remote.connected)
     }
 
     private func remoteButton(_ title: String, symbol: String, command: AppleRemoteCommand, diameter: CGFloat, glyph: CGFloat) -> some View {
@@ -211,6 +226,7 @@ struct LevelsPanel: View {
         VStack(spacing: 12) {
             HStack(spacing: 12) {
                 Image(systemName: store.muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                    .contentTransition(.symbolEffect(.replace)).animation(.snappy, value: store.muted)
                     .frame(width: 22).foregroundStyle(GlowTheme.muted)
                 if store.sonosConnected {
                     Slider(value: $store.volumeDraft, in: 0...100) { editing in
@@ -257,11 +273,15 @@ struct LevelsPanel: View {
         }
         .font(.system(size: 14))
         .padding(.horizontal, 16).padding(.vertical, 14)
-        .background(Color(white: 0.075), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .remoteGlass(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .animation(.easeInOut(duration: 0.25), value: store.sonosConnected)
+        .animation(.easeInOut(duration: 0.25), value: store.tvConnected)
     }
 
     private func value(_ number: Int) -> some View {
         Text("\(number)").font(.system(size: 13, weight: .medium)).monospacedDigit()
+            .contentTransition(.numericText(value: Double(number)))
+            .animation(.snappy(duration: 0.25), value: number)
             .foregroundStyle(GlowTheme.muted).frame(width: 28, alignment: .trailing)
     }
 

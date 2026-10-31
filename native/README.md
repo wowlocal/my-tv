@@ -1,6 +1,6 @@
 # TV Glow — native Apple apps
 
-The macOS SwiftUI app controls Anna’s LG C1 OLED brightness and Sonos Arc Ultra volume directly over the home network. Its black, minimal window follows the iOS 27 Remote app: Sonos mute, the Apple TV name and TV power across the top, a full-height touch surface, and Play/Pause · Back · TV below. Sonos volume and LG brightness sliders stay hidden until you pull them up from the bottom of the touch surface. The menu-bar panel provides quick controls. The native apps do not use the Python/web server.
+The macOS SwiftUI app controls Anna’s LG C1 OLED brightness and Sonos Arc Ultra volume directly over the home network. Its black, minimal window follows the iOS 27 Remote app: Sonos mute, the Apple TV name and TV power across the top, a full-height touch surface, and Play/Pause · Back · TV below. Sonos volume and LG brightness sliders stay hidden until you pull them up from the bottom of the touch surface. On iOS / macOS 26 and later the buttons, device capsule and slider panel use Liquid Glass (flat near-black chrome on earlier systems). Touches get a soft glow under the finger, a ripple on select and an edge chevron for each swipe step. The menu-bar panel provides quick controls. The native apps do not use the Python/web server.
 
 ![Remote interface](docs/remote-interface.png)
 

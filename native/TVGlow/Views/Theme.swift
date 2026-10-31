@@ -64,10 +64,45 @@ struct DeviceMessage: View {
 }
 
 /// Colors of the Remote app's controls: near-black fill with a hairline edge on pure black.
+/// Used where Liquid Glass is unavailable (before iOS / macOS 26).
 enum RemoteChrome {
     static let fill = Color(white: 0.06)
     static let pressed = Color(white: 0.16)
     static let stroke = Color.white.opacity(0.13)
+    static let press = Animation.spring(response: 0.28, dampingFraction: 0.62)
+    static let reveal = Animation.spring(response: 0.42, dampingFraction: 0.82)
+
+    static var hasGlass: Bool {
+        if #available(iOS 26.0, macOS 26.0, *) { return true }
+        return false
+    }
+}
+
+extension View {
+    /// Liquid Glass on iOS / macOS 26 and later; the flat Remote-app chrome before that.
+    @ViewBuilder
+    func remoteGlass<S: Shape>(_ shape: S, interactive: Bool = false, tint: Color? = nil, pressed: Bool = false) -> some View {
+        if #available(iOS 26.0, macOS 26.0, *) {
+            glassEffect(Glass.regular.tint(tint).interactive(interactive), in: shape)
+        } else {
+            background(tint ?? (pressed ? RemoteChrome.pressed : RemoteChrome.fill), in: shape)
+                .overlay(shape.stroke(tint == nil ? RemoteChrome.stroke : .clear, lineWidth: 1))
+        }
+    }
+}
+
+/// Groups glass shapes so they blend and morph together; a plain group before iOS / macOS 26.
+struct GlassGroup<Content: View>: View {
+    var spacing: CGFloat = 16
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        if #available(iOS 26.0, macOS 26.0, *) {
+            GlassEffectContainer(spacing: spacing) { content() }
+        } else {
+            content()
+        }
+    }
 }
 
 struct CircleButton: View {
@@ -76,11 +111,15 @@ struct CircleButton: View {
     var glyph: CGFloat? = nil
     var weight: Font.Weight = .regular
     var highlighted = false
+    var pulsing = false
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol).font(.system(size: glyph ?? diameter * 0.36, weight: weight))
+                .contentTransition(.symbolEffect(.replace))
+                .symbolEffect(.pulse, options: .repeating, isActive: pulsing)
+                .animation(.snappy(duration: 0.25), value: symbol)
                 .frame(width: diameter, height: diameter).contentShape(Circle())
         }
         .buttonStyle(CircleButtonStyle(highlighted: highlighted))
@@ -93,10 +132,10 @@ struct CircleButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .foregroundStyle(highlighted ? Color.black : GlowTheme.ink)
-            .background(highlighted ? Color.white : configuration.isPressed ? RemoteChrome.pressed : RemoteChrome.fill, in: Circle())
-            .overlay(Circle().strokeBorder(highlighted ? .clear : RemoteChrome.stroke, lineWidth: 1))
-            .scaleEffect(configuration.isPressed ? 0.95 : 1)
-            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+            .remoteGlass(Circle(), interactive: true, tint: highlighted ? .white : nil, pressed: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? (RemoteChrome.hasGlass ? 0.96 : 0.92) : 1)
+            .animation(RemoteChrome.press, value: configuration.isPressed)
+            .animation(.easeInOut(duration: 0.25), value: highlighted)
     }
 }
 

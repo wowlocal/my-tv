@@ -11,62 +11,33 @@ struct AppleRemoteCard<Accessory: View>: View {
     @ViewBuilder let accessory: () -> Accessory
     @FocusState private var padFocused: Bool
     @State private var navigation = RemoteTouchNavigation()
-    @State private var touching = false
     @State private var feedback = 0
-    @State private var surfaceHeight: CGFloat = 0
+    @State private var size: CGSize = .zero
     @State private var touchStarted = false
     @State private var pull = BottomEdgePull()
+    /// Where the finger is, for the soft glow that follows it.
+    @State private var touchPoint: CGPoint?
+    @State private var ripples: [Ripple] = []
+    @State private var cue: DirectionCue?
 
     private let shape = RoundedRectangle(cornerRadius: 36, style: .continuous)
 
     var body: some View {
         ZStack {
-            shape.fill(Color(white: touching ? 0.15 : 0.122))
-                .overlay { shape.strokeBorder(.white.opacity(padFocused ? 0.16 : 0), lineWidth: 1) }
-                .contentShape(shape)
-                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { surfaceHeight = $0 }
-                .gesture(DragGesture(minimumDistance: 0)
-                    .onChanged { value in
-                        if !touchStarted {
-                            touchStarted = true
-                            if onSwipeUpFromBottom != nil { pull.begin(startY: value.startLocation.y, surfaceHeight: surfaceHeight) }
-                        }
-                        if pull.move(dx: value.translation.width, dy: value.translation.height) { return }
-                        guard remote.connected else { return }
-                        touching = true
-                        padFocused = true
-                        if let command = navigation.move(x: value.translation.width, y: value.translation.height) {
-                            send(command)
-                        }
-                    }
-                    .onEnded { value in
-                        touching = false
-                        touchStarted = false
-                        if pull.end(dx: value.translation.width, dy: value.translation.height) {
-                            onSwipeUpFromBottom?()
-                            navigation.reset()
-                            return
-                        }
-                        // Not a pull after all: a tap near the edge still selects.
-                        guard remote.connected else { navigation.reset(); return }
-                        if let command = navigation.end(x: value.translation.width, y: value.translation.height) {
-                            send(command)
-                        }
-                    })
-                .accessibilityLabel("Apple TV touch surface")
-                .accessibilityHint("Swipe to navigate. Tap to select.")
-                .accessibilityAddTraits(.isButton)
-                .accessibilityAction { send(.select); padFocused = true }
-                .accessibilityIdentifier("appleTV_select")
-                .accessibilityHidden(!remote.connected)
-
-            if !remote.connected { disconnectedContent }
-
+            shape.fill(Color(white: 0.122))
+            effects.clipShape(shape).allowsHitTesting(false)
+            touchLayer
+            if !remote.connected {
+                disconnectedContent.transition(.opacity.combined(with: .scale(scale: 0.94)))
+            }
             VStack { Spacer(minLength: 0); accessory() }.padding(14)
         }
-        .animation(.easeOut(duration: 0.12), value: touching)
+        .overlay { shape.strokeBorder(.white.opacity(padFocused ? 0.16 : 0), lineWidth: 1) }
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { size = $0 }
+        .animation(.easeInOut(duration: 0.3), value: remote.connected)
+        .animation(.easeInOut(duration: 0.25), value: remote.snapshot.phase)
         .sensoryFeedback(.impact(weight: .light, intensity: 0.6), trigger: feedback)
-        .onChange(of: remote.connected) { _, _ in navigation.reset(); touching = false }
+        .onChange(of: remote.connected) { _, _ in navigation.reset(); touchPoint = nil }
         .focusable(remote.connected).focused($padFocused).focusEffectDisabled()
         .onKeyPress(.upArrow) { key(.up) }
         .onKeyPress(.downArrow) { key(.down) }
@@ -77,10 +48,114 @@ struct AppleRemoteCard<Accessory: View>: View {
         .onKeyPress(.escape) { key(.back) }
     }
 
-    private func send(_ command: AppleRemoteCommand) {
+    // MARK: Touch handling
+
+    private var touchLayer: some View {
+        Color.clear
+            .contentShape(shape)
+            .gesture(DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    if !touchStarted {
+                        touchStarted = true
+                        if onSwipeUpFromBottom != nil { pull.begin(startY: value.startLocation.y, surfaceHeight: size.height) }
+                    }
+                    if pull.move(dx: value.translation.width, dy: value.translation.height) { return }
+                    guard remote.connected else { return }
+                    padFocused = true
+                    if touchPoint == nil {
+                        withAnimation(.easeOut(duration: 0.18)) { touchPoint = value.location }
+                    } else {
+                        touchPoint = value.location
+                    }
+                    if let command = navigation.move(x: value.translation.width, y: value.translation.height) {
+                        send(command)
+                    }
+                }
+                .onEnded { value in
+                    touchStarted = false
+                    withAnimation(.easeOut(duration: 0.4)) { touchPoint = nil }
+                    if pull.end(dx: value.translation.width, dy: value.translation.height) {
+                        onSwipeUpFromBottom?()
+                        navigation.reset()
+                        return
+                    }
+                    // Not a pull after all: a tap near the edge still selects.
+                    guard remote.connected else { navigation.reset(); return }
+                    if let command = navigation.end(x: value.translation.width, y: value.translation.height) {
+                        send(command, at: value.location)
+                    }
+                })
+            .accessibilityLabel("Apple TV touch surface")
+            .accessibilityHint("Swipe to navigate. Tap to select.")
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction { send(.select); padFocused = true }
+            .accessibilityIdentifier("appleTV_select")
+            .accessibilityHidden(!remote.connected)
+    }
+
+    private func send(_ command: AppleRemoteCommand, at point: CGPoint? = nil) {
         remote.press(command)
         feedback += 1
+        switch command {
+        case .select: ripple(at: point ?? CGPoint(x: size.width / 2, y: size.height / 2))
+        case .up, .down, .left, .right: flash(command)
+        default: break
+        }
     }
+
+    private func key(_ command: AppleRemoteCommand) -> KeyPress.Result {
+        guard remote.connected else { return .ignored }
+        send(command)
+        return .handled
+    }
+
+    // MARK: Feedback animations
+
+    private var effects: some View {
+        ZStack {
+            if let touchPoint {
+                Circle()
+                    .fill(RadialGradient(colors: [.white.opacity(0.13), .white.opacity(0.04), .clear],
+                                         center: .center, startRadius: 0, endRadius: 110))
+                    .frame(width: 220, height: 220)
+                    .position(touchPoint)
+                    .transition(.opacity)
+            }
+            ForEach(ripples) { ripple in
+                RippleView().position(ripple.point)
+            }
+            if let cue {
+                Image(systemName: cue.symbol).font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.42))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: cue.alignment)
+                    .padding(22)
+                    .id(cue.id)
+                    .transition(.asymmetric(insertion: .opacity.combined(with: .offset(cue.nudge)),
+                                            removal: .opacity))
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func ripple(at point: CGPoint) {
+        let ripple = Ripple(point: point)
+        ripples.append(ripple)
+        Task {
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            ripples.removeAll { $0.id == ripple.id }
+        }
+    }
+
+    private func flash(_ command: AppleRemoteCommand) {
+        let next = DirectionCue(command: command)
+        withAnimation(.easeOut(duration: 0.12)) { cue = next }
+        Task {
+            try? await Task.sleep(nanoseconds: 260_000_000)
+            if cue?.id == next.id { withAnimation(.easeIn(duration: 0.3)) { cue = nil } }
+        }
+    }
+
+    // MARK: Not connected
 
     @ViewBuilder private var disconnectedContent: some View {
         let phase = remote.snapshot.phase
@@ -95,11 +170,59 @@ struct AppleRemoteCard<Accessory: View>: View {
             .buttonStyle(.plain).accessibilityIdentifier("appleTVOpenConnectionButton")
         }
     }
+}
 
-    private func key(_ command: AppleRemoteCommand) -> KeyPress.Result {
-        guard remote.connected else { return .ignored }
-        remote.press(command)
-        return .handled
+private struct Ripple: Identifiable {
+    let id = UUID()
+    let point: CGPoint
+}
+
+/// A ring that expands and fades where the surface was tapped.
+private struct RippleView: View {
+    @State private var expanded = false
+
+    var body: some View {
+        ZStack {
+            Circle().fill(.white.opacity(expanded ? 0 : 0.12))
+            Circle().strokeBorder(.white.opacity(expanded ? 0 : 0.45), lineWidth: 1.5)
+        }
+        .frame(width: 130, height: 130)
+        .scaleEffect(expanded ? 1.25 : 0.2)
+        .onAppear { withAnimation(.easeOut(duration: 0.5)) { expanded = true } }
+    }
+}
+
+/// A chevron that flashes at the edge a swipe moved towards.
+private struct DirectionCue: Equatable {
+    let id = UUID()
+    let command: AppleRemoteCommand
+
+    var symbol: String {
+        switch command {
+        case .up: return "chevron.up"
+        case .down: return "chevron.down"
+        case .left: return "chevron.left"
+        default: return "chevron.right"
+        }
+    }
+
+    var alignment: Alignment {
+        switch command {
+        case .up: return .top
+        case .down: return .bottom
+        case .left: return .leading
+        default: return .trailing
+        }
+    }
+
+    /// Slides in from slightly further inside, as if pushed towards the edge.
+    var nudge: CGSize {
+        switch command {
+        case .up: return CGSize(width: 0, height: 10)
+        case .down: return CGSize(width: 0, height: -10)
+        case .left: return CGSize(width: 10, height: 0)
+        default: return CGSize(width: -10, height: 0)
+        }
     }
 }
 
