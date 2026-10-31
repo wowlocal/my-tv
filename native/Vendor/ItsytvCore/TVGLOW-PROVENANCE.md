@@ -15,5 +15,6 @@ TV Glow changes:
 - Pairing readiness is exposed so PIN entry waits for the TV challenge; disconnect clears a previous challenge.
 - Intentional disconnect clears callbacks, preventing a cancelled connection from starting an unwanted reconnect.
 - Client names and logging use the host TV Glow app identity.
+- Companion and MRP reconnect retries (and the TVRC session fallback) run on the main queue instead of a global queue. Retrying `startMRPViaTunnel()` off the main thread raced `MRPManager.disconnect()` and crashed with EXC_BAD_ACCESS when iOS resumed the app.
 
 No private pairing credentials are included in this directory.

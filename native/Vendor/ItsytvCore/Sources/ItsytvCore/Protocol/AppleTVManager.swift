@@ -714,7 +714,8 @@ public final class AppleTVManager {
                     connection = nil
                     if companionRetryCount < Self.maxCompanionRetries {
                         companionRetryCount += 1
-                        DispatchQueue.global().asyncAfter(deadline: .now() + 1) { [weak self] in
+                        // TV Glow: retry on main; manager state is main-thread only.
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
                             self?.reconnectCompanion()
                         }
                     } else {
@@ -820,7 +821,7 @@ public final class AppleTVManager {
                 }
             }
             self?.connection?.startTVRCSession { proceed() }
-            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 2) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { // TV Glow: main-thread state
                 proceed()
             }
         }
@@ -920,7 +921,9 @@ public final class AppleTVManager {
                 if self.mrpRetryCount < Self.maxMRPRetries {
                     self.mrpRetryCount += 1
                     log.info("MRP tunnel lost — retrying (\(self.mrpRetryCount)/\(Self.maxMRPRetries))")
-                    DispatchQueue.global().asyncAfter(deadline: .now() + 1) { [weak self] in
+                    // TV Glow: retrying from a global queue raced the main thread inside
+                    // MRPManager.disconnect() and crashed (EXC_BAD_ACCESS) on iOS resume.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
                         self?.startMRPViaTunnel()
                     }
                 } else {
