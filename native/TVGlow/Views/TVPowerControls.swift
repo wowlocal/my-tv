@@ -7,14 +7,15 @@ struct TVPowerControls: View {
     var body: some View {
         HStack(spacing: 9) {
             Button {
-                Task { await store.turnOnTV(appleWake: remote.connected ? { remote.press(.wake) } : nil) }
+                // A paired Apple TV is connected on demand, so waking through HDMI-CEC needs no extra tap.
+                Task { await store.turnOnTV(appleWake: { Task { await remote.wake() } }) }
             } label: {
                 Label("Turn on", systemImage: "power")
                     .frame(maxWidth: .infinity).padding(.vertical, 9)
             }
             .disabled(store.tvConnected || store.tvPowerBusy || store.tvConnecting || store.applyingBrightness || store.editingBrightness)
             .accessibilityIdentifier("tvPowerOnButton")
-            .help("Wake LG over the network. A connected Apple TV can also wake it through HDMI-CEC.")
+            .help("Wake LG over the network and, when paired, through Apple TV (HDMI-CEC).")
 
             Button {
                 Task { await store.turnOffTV() }

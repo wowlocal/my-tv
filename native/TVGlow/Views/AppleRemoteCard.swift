@@ -1,109 +1,54 @@
 import SwiftUI
 
-struct AppleRemoteCard: View {
+/// The large touch surface of the Remote app. Swipe to move, tap to select.
+/// `accessory` is pinned to the bottom edge of the surface (status, level sliders).
+struct AppleRemoteCard<Accessory: View>: View {
     @ObservedObject var remote: AppleRemoteStore
     let showDevices: () -> Void
+    @ViewBuilder let accessory: () -> Accessory
     @FocusState private var padFocused: Bool
     @State private var navigation = RemoteTouchNavigation()
     @State private var touching = false
+    @State private var feedback = 0
+
+    private let shape = RoundedRectangle(cornerRadius: 36, style: .continuous)
 
     var body: some View {
-        VStack(spacing: 22) {
-            touchSurface
-            HStack(spacing: 28) {
-                commandButton("Back", symbol: "chevron.backward", command: .back, prominent: true)
-                commandButton("Home", symbol: "tv", command: .home)
-                commandButton("Play / pause", symbol: "playpause.fill", command: .playPause)
-            }
-            .disabled(!remote.connected).opacity(remote.connected ? 1 : 0.35)
-            if remote.hasError {
-                DeviceMessage(text: remote.message, error: true)
-                    .multilineTextAlignment(.center).accessibilityIdentifier("appleTVMessage")
-            }
-        }
-        .onChange(of: remote.connected) { _, _ in navigation.reset(); touching = false }
-    }
-
-    private var touchSurface: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 32, style: .continuous)
-                .fill(LinearGradient(colors: [Color(white: 0.19), Color(white: 0.135)], startPoint: .top, endPoint: .bottom))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 32, style: .continuous)
-                        .strokeBorder(.white.opacity(padFocused ? 0.24 : 0.055), lineWidth: 1)
-                }
-                .overlay {
-                    RoundedRectangle(cornerRadius: 32, style: .continuous).fill(.white.opacity(touching ? 0.025 : 0))
-                }
-                .contentShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+            shape.fill(Color(white: touching ? 0.15 : 0.122))
+                .overlay { shape.strokeBorder(.white.opacity(padFocused ? 0.16 : 0), lineWidth: 1) }
+                .contentShape(shape)
                 .gesture(DragGesture(minimumDistance: 0)
                     .onChanged { value in
                         guard remote.connected else { return }
                         touching = true
                         padFocused = true
                         if let command = navigation.move(x: value.translation.width, y: value.translation.height) {
-                            remote.press(command)
+                            send(command)
                         }
                     }
                     .onEnded { value in
                         touching = false
                         guard remote.connected else { navigation.reset(); return }
                         if let command = navigation.end(x: value.translation.width, y: value.translation.height) {
-                            remote.press(command)
+                            send(command)
                         }
                     })
                 .accessibilityLabel("Apple TV touch surface")
-                .accessibilityHint("Swipe to navigate. Click to select. You can also use the arrow buttons or keyboard.")
+                .accessibilityHint("Swipe to navigate. Tap to select.")
                 .accessibilityAddTraits(.isButton)
-                .accessibilityAction { remote.press(.select); padFocused = true }
+                .accessibilityAction { send(.select); padFocused = true }
                 .accessibilityIdentifier("appleTV_select")
                 .accessibilityHidden(!remote.connected)
                 .allowsHitTesting(remote.connected)
 
-            if remote.connected {
-                VStack {
-                    padButton(.up, symbol: "chevron.up", label: "Up")
-                    Spacer()
-                    HStack {
-                        padButton(.left, symbol: "chevron.left", label: "Left")
-                        Spacer()
-                        VStack(spacing: 7) {
-                            Image(systemName: "hand.draw").font(.system(size: 25, weight: .ultraLight))
-                            Text("Swipe to navigate").font(.system(size: 11, weight: .medium))
-                            Text("Click to select").font(.system(size: 10)).opacity(0.6)
-                        }
-                        .foregroundStyle(.white.opacity(0.28)).allowsHitTesting(false).accessibilityHidden(true)
-                        Spacer()
-                        padButton(.right, symbol: "chevron.right", label: "Right")
-                    }
-                    Spacer()
-                    padButton(.down, symbol: "chevron.down", label: "Down")
-                }
-                .padding(12)
-            } else {
-                VStack(spacing: 15) {
-                    Image(systemName: "appletv.fill").font(.system(size: 34, weight: .light)).foregroundStyle(.white.opacity(0.65))
-                    VStack(spacing: 6) {
-                        Text(remote.snapshot.phase.isBusy ? "Connecting to Apple TV" : "Your TV. At your fingertips.")
-                            .font(.system(size: 16, weight: .medium))
-                        Text(remote.snapshot.phase == .pairing ? "Enter the code from your TV to pair." : "Choose an Apple TV to get started.")
-                            .font(.system(size: 11)).foregroundStyle(GlowTheme.muted)
-                    }
-                    Button(action: showDevices) {
-                        HStack(spacing: 7) {
-                            if remote.snapshot.phase.isBusy { ProgressView().controlSize(.mini) }
-                            Text(remote.snapshot.phase == .pairing ? "Enter code" : remote.snapshot.phase.isBusy ? "View connection" : "Connect Apple TV")
-                            Image(systemName: "chevron.right").font(.system(size: 9, weight: .bold))
-                        }
-                        .font(.system(size: 12, weight: .semibold)).padding(.horizontal, 17).padding(.vertical, 11)
-                        .background(.white.opacity(0.1), in: Capsule())
-                    }
-                    .buttonStyle(.plain).accessibilityIdentifier("appleTVOpenConnectionButton")
-                }
-                .padding(24).multilineTextAlignment(.center)
-            }
+            if !remote.connected { disconnectedContent }
+
+            VStack { Spacer(minLength: 0); accessory() }.padding(14)
         }
-        .frame(height: 300)
+        .animation(.easeOut(duration: 0.12), value: touching)
+        .sensoryFeedback(.impact(weight: .light, intensity: 0.6), trigger: feedback)
+        .onChange(of: remote.connected) { _, _ in navigation.reset(); touching = false }
         .focusable(remote.connected).focused($padFocused).focusEffectDisabled()
         .onKeyPress(.upArrow) { key(.up) }
         .onKeyPress(.downArrow) { key(.down) }
@@ -112,30 +57,31 @@ struct AppleRemoteCard: View {
         .onKeyPress(.return) { key(.select) }
         .onKeyPress(.space) { key(.playPause) }
         .onKeyPress(.escape) { key(.back) }
-        .help("Swipe or click to navigate. Arrow keys move, Return selects, Space plays or pauses, Escape goes back.")
+    }
+
+    private func send(_ command: AppleRemoteCommand) {
+        remote.press(command)
+        feedback += 1
+    }
+
+    @ViewBuilder private var disconnectedContent: some View {
+        let phase = remote.snapshot.phase
+        if phase.isBusy && phase != .pairing {
+            ProgressView().tint(.white.opacity(0.5)).accessibilityLabel("Connecting to Apple TV")
+        } else {
+            Button(action: showDevices) {
+                Text(phase == .pairing ? "Enter the code shown on your TV" : "Connect Apple TV")
+                    .font(.system(size: 15, weight: .medium)).foregroundStyle(.white.opacity(0.55))
+                    .padding(20).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain).accessibilityIdentifier("appleTVOpenConnectionButton")
+        }
     }
 
     private func key(_ command: AppleRemoteCommand) -> KeyPress.Result {
         guard remote.connected else { return .ignored }
         remote.press(command)
         return .handled
-    }
-
-    private func padButton(_ command: AppleRemoteCommand, symbol: String, label: String) -> some View {
-        Button { remote.press(command); padFocused = true } label: {
-            Image(systemName: symbol).font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.32)).frame(width: 36, height: 32).contentShape(Rectangle())
-        }
-        .buttonStyle(.plain).accessibilityLabel("Apple TV \(label)").accessibilityIdentifier("appleTV_\(command.rawValue)")
-    }
-
-    private func commandButton(_ title: String, symbol: String, command: AppleRemoteCommand, prominent: Bool = false) -> some View {
-        Button { remote.press(command) } label: {
-            Image(systemName: symbol).font(.system(size: command == .back ? 27 : 23, weight: .medium))
-                .frame(width: 72, height: 72).contentShape(Circle())
-        }
-        .buttonStyle(RemoteButtonStyle(prominent: prominent))
-        .accessibilityLabel("Apple TV \(title)").help(title).accessibilityIdentifier("appleTV_\(command.rawValue)")
     }
 }
 

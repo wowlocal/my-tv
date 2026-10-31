@@ -5,7 +5,11 @@ final class MockWakeSender: TVWakeSending {
     var sent: [(String, String)] = []
     var probes = 0
     var reachable = true
-    func send(host: String, mac: String) throws { sent.append((host, mac)) }
+    var failure = false
+    func send(host: String, mac: String) throws {
+        if failure { throw ControlError.device("Wake packet could not be sent.") }
+        sent.append((host, mac))
+    }
     func isReachable(host: String) async -> Bool { probes += 1; return reachable }
 }
 
@@ -90,6 +94,44 @@ final class TVPowerTests: XCTestCase {
         XCTAssertFalse(store.tvConnected)
         XCTAssertNil(store.brightness)
         XCTAssertTrue(store.tvMessage.contains("Connect TV"))
+    }
+
+    @MainActor
+    func testPairedTVReconnectsOnlyWhenReachableAndOnlyReads() async {
+        let tv = MockTV(), wake = MockWakeSender(), pairing = MemoryPairing()
+        let unpaired = ControlStore(tv: tv, sonos: MockSonos(), vault: MemoryPairing(), wakeSender: wake, defaults: UserDefaults(suiteName: UUID().uuidString)!)
+        await unpaired.reconnectTVIfPaired()
+        XCTAssertEqual(wake.probes, 0, "An unpaired TV must wait for an explicit Connect")
+        XCTAssertFalse(unpaired.tvConnected)
+
+        pairing.keys["192.168.2.159"] = "test-key"
+        let store = ControlStore(tv: tv, sonos: MockSonos(), vault: pairing, wakeSender: wake, defaults: UserDefaults(suiteName: UUID().uuidString)!)
+        wake.reachable = false
+        await store.reconnectTVIfPaired()
+        XCTAssertEqual(wake.probes, 1)
+        XCTAssertFalse(store.tvConnected)
+        XCTAssertFalse(store.tvError)
+
+        wake.reachable = true
+        await store.reconnectTVIfPaired()
+        XCTAssertTrue(store.tvConnected)
+        XCTAssertEqual(store.brightness, 0)
+        XCTAssertTrue(tv.written.isEmpty)
+        XCTAssertEqual(tv.powerOffs, 0)
+        XCTAssertTrue(wake.sent.isEmpty)
+    }
+
+    @MainActor
+    func testWakeStillUsesAppleTVWhenNetworkWakeCannotBeSent() async {
+        let wake = MockWakeSender()
+        wake.failure = true
+        let store = ControlStore(tv: MockTV(), sonos: MockSonos(), vault: MemoryPairing(), wakeSender: wake, defaults: UserDefaults(suiteName: UUID().uuidString)!)
+        var appleWakes = 0
+        await store.turnOnTV { appleWakes += 1 }
+        XCTAssertEqual(appleWakes, 1)
+        XCTAssertFalse(store.tvError)
+        await store.turnOnTV()
+        XCTAssertTrue(store.tvError)
     }
 
     @MainActor

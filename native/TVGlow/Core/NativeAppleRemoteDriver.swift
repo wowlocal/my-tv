@@ -47,6 +47,8 @@ final class NativeAppleRemoteDriver: AppleRemoteDriving {
         manager.pressButton(button)
     }
 
+    func isPaired(deviceID: String) -> Bool { KeychainStorage.load(for: deviceID) != nil }
+
     func sendText(_ text: String) {
         manager.resetTextInputState()
         manager.updateRemoteText(text)

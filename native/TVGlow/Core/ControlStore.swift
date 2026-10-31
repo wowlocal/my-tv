@@ -38,6 +38,8 @@ final class ControlStore: ObservableObject {
     private var sonosHost: String?
     private var monitoring: Task<Void, Never>?
     private var started = false
+    private var tvAutoFailures = 0
+    private var pairedHosts: [String: Bool] = [:]
 
     init(tv: TVCommunicating? = nil, sonos: SonosCommunicating? = nil,
          vault: PairingStoring = PairingStore(), wakeSender: TVWakeSending? = nil, defaults: UserDefaults = .standard) {
@@ -57,17 +59,52 @@ final class ControlStore: ObservableObject {
         started = true
         Task {
             await connectSonos()
-            if vault.key(for: tvAddress) != nil { await connectTV() }
+            await reconnectTVIfPaired()
         }
         monitoring = Task { [weak self] in
             while !Task.isCancelled {
                 do { try await Task.sleep(nanoseconds: 5_000_000_000) } catch { return }
-                await self?.refresh()
+                guard let self else { return }
+                await self.refresh()
                 // Local-network permission can be granted after the first request fails.
                 // Retry read-only soundbar discovery while it is offline.
-                if let self, !self.sonosConnected { await self.connectSonos() }
+                if !self.sonosConnected { await self.connectSonos() }
+                await self.reconnectTVIfPaired()
             }
         }
+    }
+
+    /// Called when the app returns to the foreground: sockets may have closed while it was suspended.
+    func resume() {
+        guard started else { return }
+        tvAutoFailures = 0
+        pairedHosts.removeAll()
+        Task {
+            await refresh()
+            if !sonosConnected { await connectSonos() }
+            await reconnectTVIfPaired()
+        }
+    }
+
+    private func isPaired(_ host: String) -> Bool {
+        if let known = pairedHosts[host] { return known }
+        let paired = vault.key(for: host) != nil
+        pairedHosts[host] = paired
+        return paired
+    }
+
+    /// Reconnects to a TV this app has already paired with as soon as it answers on the network.
+    /// It only reads settings: it never pairs, wakes or changes the TV.
+    func reconnectTVIfPaired() async {
+        guard !tvConnected, !tvConnecting, !tvPowerBusy, !applyingBrightness, !editingBrightness, tvAutoFailures < 3,
+              let host = try? LocalAddress.validated(tvAddress), isPaired(host) else { return }
+        guard await wakeSender.isReachable(host: host) else {
+            if !tvError && !tvConnected && !tvPowerBusy { tvMessage = "TV is off. TV Glow connects when it turns on." }
+            return
+        }
+        guard !tvConnected, !tvConnecting, !tvPowerBusy, !applyingBrightness else { return }
+        await connectTV()
+        tvAutoFailures = tvConnected ? 0 : tvAutoFailures + 1
     }
 
     func connectTV(whileWaking: Bool = false) async {
@@ -86,12 +123,14 @@ final class ControlStore: ObservableObject {
                 self?.tvMessage = "Choose Accept on the TV’s connection request."
             }
             try vault.save(key, for: host)
+            pairedHosts[host] = true
             tvHost = host
             defaults.set(host, forKey: "tvAddress")
             let current = try await tv.brightness()
             brightness = current
             brightnessDraft = Double(current)
             tvConnected = true
+            tvAutoFailures = 0
             tvMessage = "Live from your TV."
         } catch {
             tv.disconnect()
@@ -125,9 +164,12 @@ final class ControlStore: ObservableObject {
             let host = try LocalAddress.validated(tvAddress)
             // Validate before sending either kind of wake command.
             _ = try WakeOnLAN.packet(mac: tvMAC)
-            try wakeSender.send(host: host, mac: tvMAC)
+            // iOS blocks broadcasts without Apple's multicast entitlement, so a failed network
+            // wake must not stop the Apple TV (HDMI-CEC) route.
+            let appleTVWakes = wakeWithAppleTV && appleWake != nil
+            do { try wakeSender.send(host: host, mac: tvMAC) } catch { if !appleTVWakes { throw error } }
             defaults.set(tvMAC, forKey: "tvMAC")
-            if wakeWithAppleTV { appleWake?() }
+            if appleTVWakes { appleWake?() }
             tvMessage = "Wake sent. Waiting for the TV…"
             guard vault.key(for: host) != nil else {
                 tvMessage = "Wake sent. Click Connect TV once it is on to pair."
@@ -187,8 +229,8 @@ final class ControlStore: ObservableObject {
             } catch {
                 guard !tvPowerBusy, tvConnected else { return }
                 tvConnected = false
-                tvMessage = "TV disconnected. Switch it on and reconnect."
-                tvError = true
+                tvMessage = "TV disconnected. TV Glow reconnects when it is back on."
+                tvError = false
             }
         }
         if sonosConnected && !sonosConnecting && !applyingVolume && !editingVolume, let host = sonosHost {
@@ -271,7 +313,7 @@ final class ControlStore: ObservableObject {
 
     func forgetTV() {
         guard !tvConnecting, !tvPowerBusy, !applyingBrightness else { return }
-        if let host = tvHost ?? (try? LocalAddress.validated(tvAddress)) { vault.remove(for: host) }
+        if let host = tvHost ?? (try? LocalAddress.validated(tvAddress)) { vault.remove(for: host); pairedHosts[host] = false }
         tv.disconnect()
         tvConnected = false
         brightness = nil

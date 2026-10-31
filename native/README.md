@@ -1,10 +1,10 @@
 # TV Glow — native Apple apps
 
-The macOS SwiftUI app controls Anna’s LG C1 OLED brightness and Sonos Arc Ultra volume directly over the home network. Its compact, monochrome window follows the Apple TV Remote layout: a large touch surface, circular Back / Home / Play-Pause buttons, and independent Sonos volume and LG brightness controls below. The menu-bar panel provides quick controls. The native apps do not use the Python/web server.
+The macOS SwiftUI app controls Anna’s LG C1 OLED brightness and Sonos Arc Ultra volume directly over the home network. Its black, minimal window follows the iOS 27 Remote app: Sonos mute, the Apple TV name and TV power across the top, a full-height touch surface, and Play/Pause · Back · TV below. Sonos volume and LG brightness sliders stay hidden inside the touch surface until revealed. The menu-bar panel provides quick controls. The native apps do not use the Python/web server.
 
 ![Remote interface](docs/remote-interface.png)
 
-Interface preview rendered from the native SwiftUI views with fake devices. The redesign was checked at 440 × 800 and 380 × 640 points, including connected and disconnected Apple TV states. On this Mac, native window automation returns `cgWindowNotFound`, so installed-window interaction still needs a manual check.
+Interface preview rendered from the native SwiftUI views with fake devices at 402 × 800 points, matching the iPhone layout. On this Mac, native window automation returns `cgWindowNotFound`, so installed-window interaction still needs a manual check.
 
 The installed Mac app is `/Users/anna/Applications/TV Glow.app`. Open it from Finder, Spotlight or Launchpad. Click the sun in the menu bar for quick controls. **Connections** lets you update each device’s IP address or forget this app’s TV pairing.
 
@@ -40,15 +40,17 @@ Tests use fake devices and never change real brightness, volume or mute. They co
 
 ## Apple TV remote
 
-Click the device name at the top of the remote (or **Connect Apple TV** on the touch surface) to choose a Bonjour-discovered Apple TV. Click **Connect** and enter the four-digit code displayed on the TV. Release pairing credentials are stored in this app’s own Keychain namespace; Debug uses its private development file store. Opening the app discovers devices without automatically connecting or sending remote commands.
+Click the device capsule at the top of the remote (or **Connect Apple TV** on the touch surface) to choose a Bonjour-discovered Apple TV. Click **Connect** and enter the four-digit code displayed on the TV. Release pairing credentials are stored in this app’s own Keychain namespace; Debug uses its private development file store.
 
-Swipe or drag across the touch surface to navigate; click to select. Longer drags repeat navigation, and releasing a swipe never selects an item. Discrete arrow buttons remain at the edges of the surface. Click the pad to use arrow keys, Return, Space and Escape. The keyboard button at the top left opens text entry when a search/text field is focused on Apple TV. The top-right power button opens LG power controls. Click **Brightness** for the Night / Everyday / Bright presets, and **Connections** at the bottom for device addresses, pairing and detailed connection status. Sonos and brightness controls operate independently of the Apple TV connection.
+After that one-time pairing, everything connects by itself: on launch and whenever the app returns to the foreground it reconnects to the paired Apple TV, the paired LG (once it answers on port 3000) and the Sonos. Automatic connections only verify pairing and read levels; they never start PIN pairing, send remote commands or change brightness or volume. A failed attempt retries with backoff, and **Disconnect** stops automatic Apple TV reconnection until you connect again.
+
+Swipe or drag across the touch surface to navigate; tap to select. Longer drags repeat navigation, and releasing a swipe never selects an item. On Mac, click the pad to use arrow keys, Return, Space and Escape. Text entry opens automatically when a search/text field is focused on Apple TV. The top-left button mutes the Sonos. The top-right power button turns the TV off when it is connected and on otherwise; touch and hold (right-click on Mac) for explicit **Turn On TV** / **Turn Off TV**. The sliders icon at the bottom of the touch surface reveals Sonos volume and LG brightness (the sun opens the Night / Everyday / Bright presets) and a gear for **Connections**: device addresses, pairing and detailed connection status. Sonos and brightness controls operate independently of the Apple TV connection.
 
 Menu-bar controls include Back, Play/Pause and Home after connecting. This is our own native remote using community Companion/MRP protocol implementations, rather than an embedded system iPhone Remote. Siri voice and Apple’s Control Center interface are not included. The Dev app has paired successfully with Anna’s Apple TV named `tv`. Anna confirmed that the TV power-on action worked through the paired Apple TV. Navigation/playback/text commands still need separate user-visible checks; unit tests use fakes.
 
 ## TV power
 
-**Turn on** and **Turn off** are in the remote’s top-right power popover and in the menu-bar panel. Off sends LG’s `system/turnOff` command and reports whether the TV acknowledged it. On sends a Wake-on-LAN packet to the configured LG address and the local broadcast address. If **Also wake connected Apple TV (HDMI-CEC)** is enabled in Connections, it also sends Apple TV’s Wake command. Pair/connect Apple TV before using this route. Anna confirmed this power-on action worked.
+**Turn on** and **Turn off** are in the remote’s top-right power popover and in the menu-bar panel. Off sends LG’s `system/turnOff` command and reports whether the TV acknowledged it. On sends a Wake-on-LAN packet to the configured LG address and the local broadcast address. If **Also wake connected Apple TV (HDMI-CEC)** is enabled in Connections, it also sends Apple TV’s Wake command, connecting to the paired Apple TV first when needed. iOS blocks broadcast packets without Apple’s multicast entitlement, so on iPhone the Apple TV route is the dependable one and runs even if the network wake cannot be sent. Pair Apple TV once before using this route. Anna confirmed this power-on action worked.
 
 Connections includes the TV’s wired MAC (`74:E6:B8:2D:7F:2C` by default). LG network wake requires **TV On with Mobile**; wake across routed subnets depends on the router. Apple TV wake needs HDMI-CEC / LG Simplink and **Control TVs and Receivers** on Apple TV. After wake, the app probes LG’s port and reads brightness when reconnecting. A sent wake packet alone is never shown as a confirmed TV connection. No brightness preset or volume change is applied by power actions.
 
@@ -62,7 +64,7 @@ xcodebuild -project TVGlow.xcodeproj -scheme 'TV Glow iOS' \
   -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO build
 ```
 
-The iOS target is groundwork, not yet delivered. This Mac currently reports that the iOS 26.2 platform component is missing, even though `xcodebuild -showsdks` lists its SDK. A generic-device build stops at destination selection; no platform downloads or simulator bootstrap were started. Installing on a physical iPhone will also require selecting an Apple development team in Xcode. No valid signing identity was present when the project was created. Foreground/background behavior and on-device permission prompts still need physical-iPhone validation.
+On 2026-10-31 a Debug build was signed with a personal development team (`DEVELOPMENT_TEAM=<team> -allowProvisioningUpdates` on the `xcodebuild` line, destination `id=<device UDID>`) and installed on an iPhone on iOS 27 over Wi‑Fi with `xcrun devicectl device install app`. On-device behaviour is still being validated. Earlier notes: This Mac currently reports that the iOS 26.2 platform component is missing, even though `xcodebuild -showsdks` lists its SDK. A generic-device build stops at destination selection; no platform downloads or simulator bootstrap were started. Installing on a physical iPhone will also require selecting an Apple development team in Xcode. No valid signing identity was present when the project was created. Foreground/background behavior and on-device permission prompts still need physical-iPhone validation.
 
 ## Verified on Anna’s devices
 

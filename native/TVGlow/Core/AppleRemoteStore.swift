@@ -61,6 +61,9 @@ protocol AppleRemoteDriving: AnyObject {
     func submitPIN(_ pin: String)
     func press(_ command: AppleRemoteCommand)
     func sendText(_ text: String)
+    /// Whether this app already holds pairing credentials for the device.
+    /// Only paired devices are connected automatically; pairing always needs the user.
+    func isPaired(deviceID: String) -> Bool
 }
 
 @MainActor
@@ -77,6 +80,13 @@ final class AppleRemoteStore: ObservableObject {
     private var observation: Task<Void, Never>?
     private var phaseStarted = Date()
     private var started = false
+    /// Cleared by an explicit Disconnect so the app does not fight the user.
+    private var autoConnect = true
+    /// The device of a connection the app started on its own, if one is in flight.
+    private var automaticDeviceID: String?
+    private var nextAutomaticCheck = Date.distantPast
+    private var automaticFailures = 0
+    private var pairedCache: [String: Bool] = [:]
 
     init(driver: AppleRemoteDriving? = nil, defaults: UserDefaults = .standard) {
         self.driver = driver ?? NativeAppleRemoteDriver()
@@ -121,15 +131,38 @@ final class AppleRemoteStore: ObservableObject {
             hasError = false
             if next.phase == .connected {
                 pin = ""
-                if let selectedDeviceID { defaults.set(selectedDeviceID, forKey: "appleTVDeviceID") }
+                if let selectedDeviceID {
+                    defaults.set(selectedDeviceID, forKey: "appleTVDeviceID")
+                    pairedCache[selectedDeviceID] = true
+                }
+                automaticDeviceID = nil
+                automaticFailures = 0
+            }
+        }
+        if let id = automaticDeviceID {
+            if next.phase == .pairing {
+                // An automatic connection must never put a pairing code on the TV.
+                driver.disconnect()
+                next = driver.snapshot
+                pairedCache[id] = false
+                automaticDeviceID = nil
+            } else if case .failed = next.phase {
+                pairedCache[id] = nil
+                automaticDeviceID = nil
+                automaticFailures += 1
             }
         }
         let limit: TimeInterval = next.phase == .pairing ? 120 : 25
         if next.phase.isBusy && now.timeIntervalSince(phaseStarted) > limit {
             driver.disconnect()
             next = driver.snapshot
-            notice = "Apple TV did not finish connecting. Check its screen and try again."
-            hasError = true
+            if automaticDeviceID != nil {
+                automaticDeviceID = nil
+                automaticFailures += 1
+            } else {
+                notice = "Apple TV did not finish connecting. Check its screen and try again."
+                hasError = true
+            }
             pinSubmitted = false
         }
         if snapshot.keyboardFocused && !next.keyboardFocused { text = "" }
@@ -138,10 +171,85 @@ final class AppleRemoteStore: ObservableObject {
             let preferred = defaults.string(forKey: "appleTVDeviceID")
             selectedDeviceID = snapshot.devices.first(where: { $0.id == preferred })?.id ?? snapshot.devices.first?.id
         }
+        connectAutomaticallyIfPossible(now: now)
+    }
+
+    /// Reconnects to an Apple TV this app has already paired with. Connecting only verifies the
+    /// stored pairing; it sends no remote commands.
+    private func connectAutomaticallyIfPossible(now: Date) {
+        guard started, autoConnect, now >= nextAutomaticCheck else { return }
+        switch snapshot.phase {
+        case .disconnected, .failed: break
+        default: return
+        }
+        nextAutomaticCheck = now.addingTimeInterval(2)
+        guard let device = pairedDeviceID() else { return }
+        nextAutomaticCheck = now.addingTimeInterval(min(60, 5 * pow(2, Double(min(automaticFailures, 4)))))
+        beginAutomaticConnection(to: device, now: now)
+    }
+
+    private func beginAutomaticConnection(to device: String, now: Date) {
+        selectedDeviceID = device
+        automaticDeviceID = device
+        notice = nil; hasError = false
+        driver.connect(deviceID: device)
+        phaseStarted = now
+        let next = driver.snapshot
+        if next != snapshot { snapshot = next }
+    }
+
+    private func pairedDeviceID() -> String? {
+        let preferred = defaults.string(forKey: "appleTVDeviceID")
+        let ids = snapshot.devices.map(\.id)
+        return (ids.filter { $0 == preferred } + ids.filter { $0 != preferred }).first { id in
+            if let cached = pairedCache[id] { return cached }
+            let paired = driver.isPaired(deviceID: id)
+            pairedCache[id] = paired
+            return paired
+        }
+    }
+
+    /// Wakes the TV through Apple TV (HDMI-CEC), first connecting to an already paired Apple TV
+    /// when needed. Returns false without starting pairing if no paired Apple TV is available.
+    @discardableResult
+    func wake(timeout: TimeInterval = 8) async -> Bool {
+        if !connected {
+            if !snapshot.phase.isBusy {
+                guard let device = pairedDeviceID() else { return false }
+                autoConnect = true
+                beginAutomaticConnection(to: device, now: Date())
+            }
+            let deadline = Date().addingTimeInterval(timeout)
+            while !connected && Date() < deadline {
+                do { try await Task.sleep(nanoseconds: 200_000_000) } catch { return false }
+                synchronize()
+                switch snapshot.phase {
+                case .disconnected, .failed: return false
+                default: break
+                }
+            }
+        }
+        guard connected else { return false }
+        driver.press(.wake)
+        return true
+    }
+
+    /// Called when the app returns to the foreground. Suspended apps can lose Bonjour browsing
+    /// and sockets, so look again and retry the paired Apple TV straight away.
+    func resume() {
+        guard started else { return }
+        automaticFailures = 0
+        nextAutomaticCheck = .distantPast
+        pairedCache.removeAll()
+        #if os(iOS)
+        if !connected && !snapshot.phase.isBusy { rescan() }
+        #endif
+        synchronize()
     }
 
     func connect() {
         guard canPair, let selectedDeviceID else { return }
+        autoConnect = true; automaticDeviceID = nil
         notice = nil; hasError = false; pin = ""; text = ""
         driver.connect(deviceID: selectedDeviceID)
         phaseStarted = Date()
@@ -149,6 +257,7 @@ final class AppleRemoteStore: ObservableObject {
     }
 
     func disconnect() {
+        autoConnect = false; automaticDeviceID = nil
         driver.disconnect()
         pin = ""; text = ""; pinSubmitted = false; notice = nil; hasError = false
         synchronize()

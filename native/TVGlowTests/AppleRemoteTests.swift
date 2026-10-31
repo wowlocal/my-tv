@@ -60,6 +60,9 @@ final class MockAppleRemoteDriver: AppleRemoteDriving {
     func submitPIN(_ pin: String) { pins.append(pin) }
     func press(_ command: AppleRemoteCommand) { commands.append(command) }
     func sendText(_ text: String) { texts.append(text) }
+    var paired: Set<String> = []
+    var pairedLookups = 0
+    func isPaired(deviceID: String) -> Bool { pairedLookups += 1; return paired.contains(deviceID) }
 }
 
 @MainActor
@@ -149,6 +152,95 @@ final class AppleRemoteTests: XCTestCase {
         XCTAssertEqual(driver.disconnections, 1)
         XCTAssertEqual(underTest.snapshot.phase, .disconnected)
         XCTAssertTrue(underTest.hasError)
+        XCTAssertTrue(driver.commands.isEmpty)
+    }
+
+    func testPairedAppleTVConnectsAutomaticallyWithoutSendingCommands() async {
+        let driver = MockAppleRemoteDriver()
+        driver.paired = ["tv"]
+        let underTest = store(driver)
+        defer { underTest.stop() }
+        underTest.start()
+        XCTAssertEqual(driver.connections, ["tv"])
+        XCTAssertTrue(driver.commands.isEmpty)
+        XCTAssertTrue(driver.pins.isEmpty)
+        driver.snapshot.phase = .connected
+        underTest.synchronize()
+        XCTAssertTrue(underTest.connected)
+        XCTAssertTrue(driver.commands.isEmpty)
+    }
+
+    func testAutomaticConnectionNeverStartsPINPairing() async {
+        let driver = MockAppleRemoteDriver()
+        driver.paired = ["tv"]
+        let underTest = store(driver)
+        defer { underTest.stop() }
+        underTest.start()
+        XCTAssertEqual(driver.connections, ["tv"])
+        // Credentials turned out to be missing: the TV asks for a code. Cancel instead.
+        driver.snapshot.phase = .pairing
+        underTest.synchronize()
+        XCTAssertEqual(driver.disconnections, 1)
+        XCTAssertEqual(underTest.snapshot.phase, .disconnected)
+        XCTAssertFalse(underTest.hasError)
+        underTest.synchronize(now: Date().addingTimeInterval(120))
+        XCTAssertEqual(driver.connections, ["tv"])
+        XCTAssertTrue(driver.pins.isEmpty)
+    }
+
+    func testFailedAutomaticConnectionRetriesWithBackoffAndDisconnectStopsIt() async {
+        let driver = MockAppleRemoteDriver()
+        driver.paired = ["tv"]
+        let underTest = store(driver)
+        defer { underTest.stop() }
+        underTest.start()
+        driver.snapshot.phase = .failed("Network unreachable")
+        underTest.synchronize()
+        XCTAssertEqual(driver.connections, ["tv"])
+        underTest.synchronize(now: Date().addingTimeInterval(61))
+        XCTAssertEqual(driver.connections, ["tv", "tv"])
+        driver.snapshot.phase = .connected
+        underTest.synchronize()
+        underTest.disconnect()
+        underTest.synchronize(now: Date().addingTimeInterval(600))
+        XCTAssertEqual(driver.connections, ["tv", "tv"])
+        XCTAssertTrue(driver.commands.isEmpty)
+    }
+
+    func testUnpairedAppleTVIsCheckedOnceAndNeverConnectedAutomatically() async {
+        let driver = MockAppleRemoteDriver()
+        let underTest = store(driver)
+        defer { underTest.stop() }
+        underTest.start()
+        for minutes in 1...5 { underTest.synchronize(now: Date().addingTimeInterval(Double(minutes) * 60)) }
+        XCTAssertTrue(driver.connections.isEmpty)
+        XCTAssertEqual(driver.pairedLookups, 1)
+    }
+
+    func testWakeConnectsPairedAppleTVThenSendsWake() async throws {
+        let driver = MockAppleRemoteDriver()
+        driver.paired = ["tv"]
+        let underTest = store(driver)
+        defer { underTest.stop() }
+        underTest.synchronize()
+        let waking = Task { await underTest.wake(timeout: 3) }
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertEqual(driver.connections, ["tv"])
+        XCTAssertTrue(driver.commands.isEmpty)
+        driver.snapshot.phase = .connected
+        let woke = await waking.value
+        XCTAssertTrue(woke)
+        XCTAssertEqual(driver.commands, [.wake])
+    }
+
+    func testWakeWithoutPairedAppleTVDoesNothing() async {
+        let driver = MockAppleRemoteDriver()
+        let underTest = store(driver)
+        defer { underTest.stop() }
+        underTest.synchronize()
+        let woke = await underTest.wake(timeout: 1)
+        XCTAssertFalse(woke)
+        XCTAssertTrue(driver.connections.isEmpty)
         XCTAssertTrue(driver.commands.isEmpty)
     }
 
