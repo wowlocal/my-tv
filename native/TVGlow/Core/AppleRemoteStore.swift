@@ -51,6 +51,32 @@ struct RemoteTouchNavigation {
     }
 }
 
+/// Tells a pull-up from the touch surface's bottom edge (reveals the sliders) apart from
+/// ordinary navigation that happens to start there.
+struct BottomEdgePull {
+    static let zone = 48.0
+    private(set) var active = false
+
+    /// Call once when a touch begins.
+    mutating func begin(startY: Double, surfaceHeight: Double) {
+        active = surfaceHeight > 0 && startY > surfaceHeight - Self.zone
+    }
+
+    /// Returns true while the touch still counts as a pull. Sideways or downward
+    /// movement hands the touch back to navigation for good.
+    mutating func move(dx: Double, dy: Double) -> Bool {
+        guard active else { return false }
+        if (abs(dx) > 20 && abs(dx) > -dy) || dy > 20 { active = false }
+        return active
+    }
+
+    /// Returns true if the touch ended as an upward pull.
+    mutating func end(dx: Double, dy: Double) -> Bool {
+        defer { active = false }
+        return active && -dy > 24 && -dy > abs(dx)
+    }
+}
+
 @MainActor
 protocol AppleRemoteDriving: AnyObject {
     var snapshot: AppleRemoteSnapshot { get }

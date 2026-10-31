@@ -35,6 +35,29 @@ final class RemoteTouchNavigationTests: XCTestCase {
         XCTAssertNil(navigation.end(x: 20, y: 0))
     }
 
+    func testPullUpFromBottomEdgeRevealsButOtherTouchesNavigate() {
+        var pull = BottomEdgePull()
+        pull.begin(startY: 560, surfaceHeight: 576)
+        XCTAssertTrue(pull.move(dx: 2, dy: -15))
+        XCTAssertTrue(pull.end(dx: 3, dy: -60))
+
+        pull.begin(startY: 300, surfaceHeight: 576)
+        XCTAssertFalse(pull.move(dx: 0, dy: -80), "Mid-surface swipes stay navigation")
+        XCTAssertFalse(pull.end(dx: 0, dy: -80))
+
+        pull.begin(startY: 570, surfaceHeight: 576)
+        XCTAssertFalse(pull.move(dx: 40, dy: -5), "Sideways along the edge is navigation")
+        XCTAssertFalse(pull.move(dx: 40, dy: -60), "Once handed to navigation it stays there")
+        XCTAssertFalse(pull.end(dx: 40, dy: -60))
+
+        pull.begin(startY: 570, surfaceHeight: 576)
+        XCTAssertTrue(pull.move(dx: 0, dy: 1))
+        XCTAssertFalse(pull.end(dx: 0, dy: 1), "A tap at the edge still selects")
+
+        pull.begin(startY: 570, surfaceHeight: 0)
+        XCTAssertFalse(pull.move(dx: 0, dy: -60), "Unknown layout never captures touches")
+    }
+
     func testResetDiscardsInterruptedGesture() {
         var navigation = RemoteTouchNavigation()
         XCTAssertEqual(navigation.move(x: 40, y: 0), .right)

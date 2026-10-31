@@ -17,8 +17,12 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             topBar.padding(.bottom, 22)
-            AppleRemoteCard(remote: remote, showDevices: { showingDevices = true }) { surfaceAccessory }
+            AppleRemoteCard(remote: remote, showDevices: { showingDevices = true },
+                            onSwipeUpFromBottom: { setLevels(true) }) { surfaceAccessory }
                 .frame(maxHeight: .infinity)
+                .accessibilityAction(named: showLevels ? "Hide volume and brightness" : "Show volume and brightness") {
+                    setLevels(!showLevels)
+                }
             bottomButtons.padding(.top, 16)
         }
         .padding(.horizontal, 15).padding(.top, 8).padding(.bottom, 10)
@@ -138,21 +142,45 @@ struct ContentView: View {
                     .accessibilityIdentifier("statusMessage")
             }
             if showLevels {
-                LevelsPanel(store: store).transition(.opacity.combined(with: .move(edge: .bottom)))
-            }
-            HStack(spacing: 4) {
-                if showLevels {
-                    SurfaceIcon(symbol: "gearshape", label: "Connections") { showingConnections = true }
-                        .accessibilityIdentifier("connectionsButton")
+                VStack(spacing: 6) {
+                    grabber.frame(maxWidth: .infinity).overlay(alignment: .trailing) {
+                        SurfaceIcon(symbol: "gearshape", label: "Connections") { showingConnections = true }
+                            .accessibilityIdentifier("connectionsButton")
+                    }
+                    LevelsPanel(store: store)
                 }
-                SurfaceIcon(symbol: showLevels ? "chevron.down" : "slider.horizontal.3",
-                            label: showLevels ? "Hide volume and brightness" : "Show volume and brightness") {
-                    withAnimation(.snappy(duration: 0.25)) { showLevels.toggle() }
-                }
-                .accessibilityIdentifier("levelsToggle")
+                // Swipe down over the panel to tuck the sliders away again. Simultaneous, so
+                // horizontal slider drags keep working.
+                .simultaneousGesture(DragGesture(minimumDistance: 12).onEnded { value in
+                    let down = value.translation.height
+                    if down > 30 && down > abs(value.translation.width) * 1.5 { setLevels(false) }
+                })
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
+            } else {
+                grabber
             }
         }
         .animation(.easeOut(duration: 0.2), value: status)
+    }
+
+    private func setLevels(_ visible: Bool) {
+        guard visible != showLevels else { return }
+        feedback += 1
+        withAnimation(.snappy(duration: 0.28)) { showLevels = visible }
+    }
+
+    /// Sheet-style handle: pull up (or tap) to reveal the sliders, pull down to hide them.
+    private var grabber: some View {
+        Capsule().fill(.white.opacity(0.24)).frame(width: 36, height: 5)
+            .frame(width: 88, height: 26).contentShape(Rectangle())
+            .onTapGesture { setLevels(!showLevels) }
+            .gesture(DragGesture(minimumDistance: 6).onEnded { value in
+                if value.translation.height < -16 { setLevels(true) }
+                if value.translation.height > 16 { setLevels(false) }
+            })
+            .accessibilityElement().accessibilityAddTraits(.isButton)
+            .accessibilityLabel(showLevels ? "Hide volume and brightness" : "Show volume and brightness")
+            .accessibilityIdentifier("levelsToggle")
     }
 
     // MARK: Bottom buttons
