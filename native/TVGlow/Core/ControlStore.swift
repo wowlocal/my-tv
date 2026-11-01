@@ -39,6 +39,9 @@ final class ControlStore: ObservableObject {
     private var monitoring: Task<Void, Never>?
     private var started = false
     private var tvAutoFailures = 0
+    /// The latest level released while an earlier one was still being applied.
+    private var queuedBrightness: Int?
+    private var queuedVolume: Int?
     private var pairedHosts: [String: Bool] = [:]
 
     init(tv: TVCommunicating? = nil, sonos: SonosCommunicating? = nil,
@@ -245,35 +248,58 @@ final class ControlStore: ObservableObject {
         }
     }
 
+    /// A level released while the previous one is still being applied waits its turn instead of
+    /// being dropped, so the level bars never have to be disabled (and blink) while applying.
     func setBrightness(_ target: Int) async {
-        guard tvConnected, !tvPowerBusy, !applyingBrightness, (0...100).contains(target) else { return }
+        guard tvConnected, !tvPowerBusy, (0...100).contains(target) else { return }
+        guard !applyingBrightness else { queuedBrightness = target; return }
         applyingBrightness = true
+        defer { applyingBrightness = false }
+        var next: Int? = target
+        while let target = next, tvConnected, !tvPowerBusy {
+            await applyBrightness(target)
+            next = queuedBrightness
+            queuedBrightness = nil
+        }
+    }
+
+    private func applyBrightness(_ target: Int) async {
         tvError = false
         tvMessage = "Adjusting the glow…"
-        defer { applyingBrightness = false }
         do {
             try await tv.setBrightness(target)
             try await Task.sleep(nanoseconds: 300_000_000)
             let actual = try await tv.brightness()
             brightness = actual
-            brightnessDraft = Double(actual)
+            // Readback never moves a bar that is being held.
+            if !editingBrightness { brightnessDraft = Double(actual) }
             guard actual == target else {
                 throw ControlError.device("The TV kept its previous brightness. Check its Energy Saving setting.")
             }
             tvMessage = "Brightness set to \(actual)%."
         } catch {
-            if let brightness { brightnessDraft = Double(brightness) }
+            if let brightness, !editingBrightness { brightnessDraft = Double(brightness) }
             tvMessage = error.localizedDescription
             tvError = true
         }
     }
 
     func setVolume(_ target: Int) async {
-        guard sonosConnected, let host = sonosHost, !applyingVolume, (0...100).contains(target) else { return }
+        guard sonosConnected, sonosHost != nil, (0...100).contains(target) else { return }
+        guard !applyingVolume else { queuedVolume = target; return }
         applyingVolume = true
+        defer { applyingVolume = false }
+        var next: Int? = target
+        while let target = next, sonosConnected, let host = sonosHost {
+            await applyVolume(target, host: host)
+            next = queuedVolume
+            queuedVolume = nil
+        }
+    }
+
+    private func applyVolume(_ target: Int, host: String) async {
         sonosError = false
         sonosMessage = "Adjusting volume…"
-        defer { applyingVolume = false }
         do {
             try await sonos.setVolume(target, host: host)
             let actual = try await sonos.state(host: host)
@@ -281,7 +307,7 @@ final class ControlStore: ObservableObject {
             guard actual.volume == target else { throw ControlError.device("Sonos kept its previous volume. Check the soundbar’s volume limit.") }
             sonosMessage = "Volume set to \(actual.volume)%."
         } catch {
-            if let volume { volumeDraft = Double(volume) }
+            if let volume, !editingVolume { volumeDraft = Double(volume) }
             sonosMessage = error.localizedDescription
             sonosError = true
         }
@@ -307,7 +333,8 @@ final class ControlStore: ObservableObject {
 
     private func updateSonos(_ state: SonosState) {
         volume = state.volume
-        volumeDraft = Double(state.volume)
+        // Readback never moves a bar that is being held.
+        if !editingVolume { volumeDraft = Double(state.volume) }
         muted = state.muted
     }
 

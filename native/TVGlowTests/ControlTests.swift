@@ -21,7 +21,10 @@ final class MockSonos: SonosCommunicating {
     var muteWrites: [Bool] = []
     func identify(host: String) async throws -> String { "Sonos Arc Ultra" }
     func state(host: String) async throws -> SonosState { current }
+    /// Simulated network time for a volume write.
+    var delay: UInt64 = 0
     func setVolume(_ volume: Int, host: String) async throws {
+        if delay > 0 { try await Task.sleep(nanoseconds: delay) }
         written.append(volume); current = SonosState(volume: volume, muted: current.muted)
     }
     func setMuted(_ muted: Bool, host: String) async throws {
@@ -110,5 +113,41 @@ final class ControlTests: XCTestCase {
         XCTAssertTrue(tv.written.isEmpty)
         await store.setVolume(101)
         XCTAssertEqual(sonos.written, [44])
+    }
+
+    @MainActor
+    func testVolumeReleasedWhileApplyingIsQueuedNotDropped() async throws {
+        let sonos = MockSonos()
+        sonos.delay = 200_000_000
+        let store = ControlStore(tv: MockTV(), sonos: sonos, vault: MemoryPairing(), defaults: UserDefaults(suiteName: UUID().uuidString)!)
+        await store.connectSonos()
+        let first = Task { await store.setVolume(40) }
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertTrue(store.applyingVolume)
+        await store.setVolume(38)
+        await store.setVolume(35)
+        await first.value
+        XCTAssertEqual(sonos.written, [40, 35], "Only the latest queued level is applied")
+        XCTAssertEqual(store.volume, 35)
+        XCTAssertEqual(store.volumeDraft, 35)
+        XCTAssertFalse(store.applyingVolume)
+    }
+
+    @MainActor
+    func testReadbackDoesNotMoveAHeldVolumeBar() async throws {
+        let sonos = MockSonos()
+        sonos.delay = 200_000_000
+        let store = ControlStore(tv: MockTV(), sonos: sonos, vault: MemoryPairing(), defaults: UserDefaults(suiteName: UUID().uuidString)!)
+        await store.connectSonos()
+        let applying = Task { await store.setVolume(40) }
+        try await Task.sleep(nanoseconds: 50_000_000)
+        store.editingVolume = true
+        store.volumeDraft = 30
+        await applying.value
+        XCTAssertEqual(store.volume, 40)
+        XCTAssertEqual(store.volumeDraft, 30, "The bar stays under the finger")
+        store.editingVolume = false
+        await store.refresh()
+        XCTAssertEqual(store.volumeDraft, 40, "Once released, readback shows the device level again")
     }
 }

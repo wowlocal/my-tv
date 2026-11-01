@@ -35,35 +35,54 @@ final class RemoteTouchNavigationTests: XCTestCase {
         XCTAssertNil(navigation.end(x: 20, y: 0))
     }
 
-    func testPullUpFromBottomEdgeRevealsButOtherTouchesNavigate() {
-        var pull = BottomEdgePull()
-        pull.begin(startY: 560, surfaceHeight: 576)
-        XCTAssertTrue(pull.move(dx: 2, dy: -15))
-        XCTAssertTrue(pull.end(dx: 3, dy: -60))
-
-        pull.begin(startY: 300, surfaceHeight: 576)
-        XCTAssertFalse(pull.move(dx: 0, dy: -80), "Mid-surface swipes stay navigation")
-        XCTAssertFalse(pull.end(dx: 0, dy: -80))
-
-        pull.begin(startY: 570, surfaceHeight: 576)
-        XCTAssertFalse(pull.move(dx: 40, dy: -5), "Sideways along the edge is navigation")
-        XCTAssertFalse(pull.move(dx: 40, dy: -60), "Once handed to navigation it stays there")
-        XCTAssertFalse(pull.end(dx: 40, dy: -60))
-
-        pull.begin(startY: 570, surfaceHeight: 576)
-        XCTAssertTrue(pull.move(dx: 0, dy: 1))
-        XCTAssertFalse(pull.end(dx: 0, dy: 1), "A tap at the edge still selects")
-
-        pull.begin(startY: 570, surfaceHeight: 0)
-        XCTAssertFalse(pull.move(dx: 0, dy: -60), "Unknown layout never captures touches")
-    }
-
     func testResetDiscardsInterruptedGesture() {
         var navigation = RemoteTouchNavigation()
         XCTAssertEqual(navigation.move(x: 40, y: 0), .right)
         navigation.reset()
         XCTAssertNil(navigation.move(x: 2, y: 0))
         XCTAssertEqual(navigation.end(x: 2, y: 0), .select)
+    }
+}
+
+final class LevelDragTests: XCTestCase {
+    func testTapNeverChangesTheLevel() {
+        var drag = LevelDrag()
+        XCTAssertNil(drag.move(dx: 0, dy: 0, width: 200, current: 30))
+        XCTAssertNil(drag.move(dx: 3, dy: 2, width: 200, current: 30))
+        XCTAssertFalse(drag.end())
+    }
+
+    func testVerticalSwipeIsIgnoredForTheWholeTouch() {
+        var drag = LevelDrag()
+        XCTAssertNil(drag.move(dx: 2, dy: -20, width: 200, current: 30))
+        XCTAssertEqual(drag.state, .ignored)
+        XCTAssertNil(drag.move(dx: 120, dy: -20, width: 200, current: 30), "Turning sideways later does not adjust")
+        XCTAssertFalse(drag.end())
+        XCTAssertEqual(drag.state, .idle)
+    }
+
+    func testSidewaysDragFollowsTheFingerWithoutJumping() {
+        var drag = LevelDrag()
+        XCTAssertEqual(drag.move(dx: 10, dy: 2, width: 200, current: 40), 40, "Crossing the slop does not jump")
+        XCTAssertEqual(drag.move(dx: 60, dy: 5, width: 200, current: 99), 65, "Relative to the start level, not the readback")
+        XCTAssertEqual(drag.move(dx: 60, dy: 90, width: 200, current: 40), 65, "Vertical drift while adjusting is fine")
+        XCTAssertTrue(drag.end())
+    }
+
+    func testLevelsStayInRange() {
+        var drag = LevelDrag()
+        _ = drag.move(dx: -10, dy: 0, width: 200, current: 20)
+        XCTAssertEqual(drag.move(dx: -200, dy: 0, width: 200, current: 20), 0)
+        XCTAssertTrue(drag.end())
+        _ = drag.move(dx: 10, dy: 0, width: 200, current: 90)
+        XCTAssertEqual(drag.move(dx: 400, dy: 0, width: 200, current: 90), 100)
+        XCTAssertTrue(drag.end())
+    }
+
+    func testUnknownWidthNeverAdjusts() {
+        var drag = LevelDrag()
+        XCTAssertNil(drag.move(dx: 40, dy: 0, width: 0, current: 50))
+        XCTAssertFalse(drag.end())
     }
 }
 

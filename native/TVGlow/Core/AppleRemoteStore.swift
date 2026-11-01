@@ -51,29 +51,34 @@ struct RemoteTouchNavigation {
     }
 }
 
-/// Tells a pull-up from the touch surface's bottom edge (reveals the sliders) apart from
-/// ordinary navigation that happens to start there.
-struct BottomEdgePull {
-    static let zone = 48.0
-    private(set) var active = false
+/// Turns a drag on a level bar (volume, brightness) into a new level. The level moves with
+/// the finger from where it was, never jumps to where the finger landed, and only once the
+/// touch is clearly sideways, so a stray tap or a vertical swipe never changes a level.
+struct LevelDrag {
+    /// How far a touch moves before it counts as sideways (adjusting) or not (ignored).
+    static let slop = 8.0
+    enum State: Equatable { case idle, undecided, adjusting, ignored }
+    private(set) var state = State.idle
+    private var startLevel = 0.0
+    private var anchorX = 0.0
 
-    /// Call once when a touch begins.
-    mutating func begin(startY: Double, surfaceHeight: Double) {
-        active = surfaceHeight > 0 && startY > surfaceHeight - Self.zone
+    /// Feed every touch movement. `current` is read on the first call of a touch.
+    /// Returns the new level while adjusting, otherwise nil.
+    mutating func move(dx: Double, dy: Double, width: Double, current: Double,
+                       range: ClosedRange<Double> = 0...100) -> Double? {
+        if state == .idle { state = .undecided; startLevel = current }
+        if state == .undecided, max(abs(dx), abs(dy)) >= Self.slop {
+            if width > 0 && abs(dx) > abs(dy) { state = .adjusting; anchorX = dx } else { state = .ignored }
+        }
+        guard state == .adjusting else { return nil }
+        let level = startLevel + (dx - anchorX) / width * (range.upperBound - range.lowerBound)
+        return min(max(level, range.lowerBound), range.upperBound)
     }
 
-    /// Returns true while the touch still counts as a pull. Sideways or downward
-    /// movement hands the touch back to navigation for good.
-    mutating func move(dx: Double, dy: Double) -> Bool {
-        guard active else { return false }
-        if (abs(dx) > 20 && abs(dx) > -dy) || dy > 20 { active = false }
-        return active
-    }
-
-    /// Returns true if the touch ended as an upward pull.
-    mutating func end(dx: Double, dy: Double) -> Bool {
-        defer { active = false }
-        return active && -dy > 24 && -dy > abs(dx)
+    /// Ends the touch. Returns true if it changed the level, which should then be applied.
+    mutating func end() -> Bool {
+        defer { state = .idle }
+        return state == .adjusting
     }
 }
 

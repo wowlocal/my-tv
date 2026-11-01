@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// Mirrors the iOS 27 Remote app: mute · device · power on top, a full-height touch surface,
-/// and Play/Pause · Back · TV below. Level sliders stay hidden until asked for.
+/// and Play/Pause · Back · TV below. Volume and brightness sit between the surface and the
+/// buttons, behind a handle, so each area answers to exactly one kind of touch.
 struct ContentView: View {
     @ObservedObject var store: ControlStore
     @ObservedObject var remote: AppleRemoteStore
@@ -17,13 +18,10 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             topBar.padding(.bottom, 22)
-            AppleRemoteCard(remote: remote, showDevices: { showingDevices = true },
-                            onSwipeUpFromBottom: { setLevels(true) }) { surfaceAccessory }
+            AppleRemoteCard(remote: remote, showDevices: { showingDevices = true }) { statusText }
                 .frame(maxHeight: .infinity)
-                .accessibilityAction(named: showLevels ? "Hide volume and brightness" : "Show volume and brightness") {
-                    setLevels(!showLevels)
-                }
-            bottomButtons.padding(.top, 16)
+            levels
+            bottomButtons.padding(.top, 12)
         }
         .padding(.horizontal, 15).padding(.top, 8).padding(.bottom, 10)
         .frame(maxWidth: 520).frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -142,36 +140,32 @@ struct ContentView: View {
         return nil
     }
 
-    private var surfaceAccessory: some View {
-        VStack(spacing: 10) {
+    /// Display-only: the touch surface keeps every touch for Apple TV.
+    private var statusText: some View {
+        VStack {
             if let status {
                 Text(status).font(.system(size: 12)).foregroundStyle(GlowTheme.muted)
                     .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 12).allowsHitTesting(false).transition(.opacity)
+                    .padding(.horizontal, 12).transition(.opacity)
                     .accessibilityIdentifier("statusMessage")
-            }
-            if showLevels {
-                VStack(spacing: 6) {
-                    grabber.frame(maxWidth: .infinity).overlay(alignment: .trailing) {
-                        SurfaceIcon(symbol: "gearshape", label: "Connections") { showingConnections = true }
-                            .accessibilityIdentifier("connectionsButton")
-                    }
-                    LevelsPanel(store: store)
-                }
-                // Swipe down over the panel to tuck the sliders away again. Simultaneous, so
-                // horizontal slider drags keep working.
-                .simultaneousGesture(DragGesture(minimumDistance: 12).onEnded { value in
-                    let down = value.translation.height
-                    if down > 30 && down > abs(value.translation.width) * 1.5 { setLevels(false) }
-                })
-                .transition(.asymmetric(
-                    insertion: .move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.94, anchor: .bottom)),
-                    removal: .move(edge: .bottom).combined(with: .opacity)))
-            } else {
-                grabber.transition(.opacity)
             }
         }
         .animation(.easeOut(duration: 0.2), value: status)
+    }
+
+    // MARK: Volume and brightness
+
+    /// Lives below the touch surface, never on it: a swipe that starts on the surface can't
+    /// move a level, and a slip off a level bar can't reach Apple TV.
+    private var levels: some View {
+        VStack(spacing: 6) {
+            handle
+            if showLevels {
+                LevelsPanel(store: store)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
+            }
+        }
+        .padding(.top, 4)
         .animation(RemoteChrome.reveal, value: showLevels)
     }
 
@@ -181,18 +175,26 @@ struct ContentView: View {
         withAnimation(RemoteChrome.reveal) { showLevels = visible }
     }
 
-    /// Sheet-style handle: pull up (or tap) to reveal the sliders, pull down to hide them.
-    private var grabber: some View {
+    /// The only way to show or hide the level bars: tap it, or swipe up / down on it.
+    private var handle: some View {
         Capsule().fill(.white.opacity(0.24)).frame(width: 36, height: 5)
-            .frame(width: 88, height: 26).contentShape(Rectangle())
+            .frame(width: 120, height: 28).contentShape(Rectangle())
             .onTapGesture { setLevels(!showLevels) }
-            .gesture(DragGesture(minimumDistance: 6).onEnded { value in
-                if value.translation.height < -16 { setLevels(true) }
-                if value.translation.height > 16 { setLevels(false) }
+            .gesture(DragGesture(minimumDistance: 8).onEnded { value in
+                let dy = value.translation.height
+                guard abs(dy) > abs(value.translation.width) else { return }
+                if dy < -14 { setLevels(true) } else if dy > 14 { setLevels(false) }
             })
             .accessibilityElement().accessibilityAddTraits(.isButton)
             .accessibilityLabel(showLevels ? "Hide volume and brightness" : "Show volume and brightness")
             .accessibilityIdentifier("levelsToggle")
+            .frame(maxWidth: .infinity)
+            .overlay(alignment: .trailing) {
+                if showLevels {
+                    SurfaceIcon(symbol: "gearshape", label: "Connections") { showingConnections = true }
+                        .accessibilityIdentifier("connectionsButton").transition(.opacity)
+                }
+            }
     }
 
     // MARK: Bottom buttons
@@ -223,17 +225,16 @@ struct LevelsPanel: View {
     @ObservedObject var store: ControlStore
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 4) {
             HStack(spacing: 12) {
                 Image(systemName: store.muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
                     .contentTransition(.symbolEffect(.replace)).animation(.snappy, value: store.muted)
                     .frame(width: 22).foregroundStyle(GlowTheme.muted)
                 if store.sonosConnected {
-                    Slider(value: $store.volumeDraft, in: 0...100) { editing in
+                    bar($store.volumeDraft) { editing in
                         store.editingVolume = editing
                         if !editing { Task { await store.setVolume(Int(store.volumeDraft)) } }
                     }
-                    .disabled(store.applyingVolume)
                     .accessibilityLabel("Sonos volume").accessibilityValue("\(Int(store.volumeDraft)) percent")
                     .accessibilityIdentifier("volumeSlider")
                     value(Int(store.volumeDraft))
@@ -253,11 +254,11 @@ struct LevelsPanel: View {
                 .disabled(!store.tvConnected || store.applyingBrightness)
                 .accessibilityLabel("Brightness presets").accessibilityIdentifier("brightnessPresetsButton")
                 if store.tvConnected {
-                    Slider(value: $store.brightnessDraft, in: 0...100) { editing in
+                    bar($store.brightnessDraft) { editing in
                         store.editingBrightness = editing
                         if !editing { Task { await store.setBrightness(Int(store.brightnessDraft)) } }
                     }
-                    .disabled(store.applyingBrightness || store.tvPowerBusy)
+                    .disabled(store.tvPowerBusy)
                     .accessibilityLabel("TV brightness").accessibilityValue("\(Int(store.brightnessDraft)) percent")
                     .accessibilityIdentifier("brightnessSlider")
                     value(Int(store.brightnessDraft))
@@ -272,10 +273,21 @@ struct LevelsPanel: View {
             }
         }
         .font(.system(size: 14))
-        .padding(.horizontal, 16).padding(.vertical, 14)
+        .padding(.horizontal, 16).padding(.vertical, 10)
         .remoteGlass(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .animation(.easeInOut(duration: 0.25), value: store.sonosConnected)
         .animation(.easeInOut(duration: 0.25), value: store.tvConnected)
+    }
+
+    /// Levels stay usable while a change is being applied: the store queues the latest one.
+    @ViewBuilder
+    private func bar(_ level: Binding<Double>, onEditingChanged: @escaping (Bool) -> Void) -> some View {
+        #if os(iOS)
+        LevelBar(value: level, onEditingChanged: onEditingChanged)
+        #else
+        Slider(value: level, in: 0...100, onEditingChanged: onEditingChanged)
+        #endif
     }
 
     private func value(_ number: Int) -> some View {
@@ -293,3 +305,62 @@ struct LevelsPanel: View {
         Button("\(title) · \(value)%") { Task { await store.setBrightness(value) } }
     }
 }
+
+#if os(iOS)
+/// A level bar driven by one gesture. The level follows the finger from where it was instead of
+/// jumping to the touch, and taps or vertical swipes are ignored (see `LevelDrag`), so brushing
+/// it never changes the volume or brightness. It thickens while it is being adjusted.
+struct LevelBar: View {
+    @Binding var value: Double
+    var step = 5.0
+    let onEditingChanged: (Bool) -> Void
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var drag = LevelDrag()
+    @State private var width = 0.0
+    @GestureState private var touching = false
+
+    var body: some View {
+        let adjusting = drag.state == .adjusting
+        Capsule().fill(.white.opacity(0.14))
+            .overlay(alignment: .leading) {
+                Rectangle().fill(.white.opacity(isEnabled ? 0.92 : 0.35))
+                    .frame(width: width * min(max(value / 100, 0), 1))
+            }
+            .clipShape(Capsule())
+            .frame(height: adjusting ? 12 : 6)
+            .frame(maxWidth: .infinity, minHeight: 36)
+            .contentShape(Rectangle())
+            .onGeometryChange(for: Double.self) { $0.size.width } action: { width = $0 }
+            .gesture(DragGesture(minimumDistance: 0)
+                .updating($touching) { _, state, _ in state = true }
+                .onChanged { gesture in
+                    guard isEnabled else { return }
+                    let wasAdjusting = drag.state == .adjusting
+                    guard let level = drag.move(dx: gesture.translation.width, dy: gesture.translation.height,
+                                                width: width, current: value) else { return }
+                    if !wasAdjusting { onEditingChanged(true) }
+                    value = level
+                }
+                .onEnded { _ in finish() })
+            // Also ends a touch the system cancelled, so a level is never left half-edited.
+            .onChange(of: touching) { _, now in if !now { finish() } }
+            .animation(.snappy(duration: 0.2), value: adjusting)
+            .accessibilityElement()
+            .accessibilityAdjustableAction { direction in
+                let delta: Double
+                switch direction {
+                case .increment: delta = step
+                case .decrement: delta = -step
+                @unknown default: return
+                }
+                onEditingChanged(true)
+                value = min(max(value + delta, 0), 100)
+                onEditingChanged(false)
+            }
+    }
+
+    private func finish() {
+        if drag.end() { onEditingChanged(false) }
+    }
+}
+#endif

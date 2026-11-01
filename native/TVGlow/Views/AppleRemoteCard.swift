@@ -1,20 +1,16 @@
 import SwiftUI
 
-/// The large touch surface of the Remote app. Swipe to move, tap to select.
-/// `accessory` is pinned to the bottom edge of the surface (status, level sliders).
-/// A swipe that starts at the bottom edge and moves up calls `onSwipeUpFromBottom`
-/// instead of navigating, like pulling up a sheet.
+/// The large touch surface of the Remote app. Swipe to move, tap to select. Every touch on it
+/// belongs to Apple TV: nothing else on the surface reacts to touches.
+/// `accessory` is pinned to the bottom edge of the surface and is display-only (status text).
 struct AppleRemoteCard<Accessory: View>: View {
     @ObservedObject var remote: AppleRemoteStore
     let showDevices: () -> Void
-    var onSwipeUpFromBottom: (() -> Void)? = nil
     @ViewBuilder let accessory: () -> Accessory
     @FocusState private var padFocused: Bool
     @State private var navigation = RemoteTouchNavigation()
     @State private var feedback = 0
     @State private var size: CGSize = .zero
-    @State private var touchStarted = false
-    @State private var pull = BottomEdgePull()
     /// Where the finger is, for the soft glow that follows it.
     @State private var touchPoint: CGPoint?
     @State private var ripples: [Ripple] = []
@@ -30,7 +26,7 @@ struct AppleRemoteCard<Accessory: View>: View {
             if !remote.connected {
                 disconnectedContent.transition(.opacity.combined(with: .scale(scale: 0.94)))
             }
-            VStack { Spacer(minLength: 0); accessory() }.padding(14)
+            VStack { Spacer(minLength: 0); accessory() }.padding(14).allowsHitTesting(false)
         }
         .overlay { shape.strokeBorder(.white.opacity(padFocused ? 0.16 : 0), lineWidth: 1) }
         .onGeometryChange(for: CGSize.self) { $0.size } action: { size = $0 }
@@ -55,11 +51,6 @@ struct AppleRemoteCard<Accessory: View>: View {
             .contentShape(shape)
             .gesture(DragGesture(minimumDistance: 0)
                 .onChanged { value in
-                    if !touchStarted {
-                        touchStarted = true
-                        if onSwipeUpFromBottom != nil { pull.begin(startY: value.startLocation.y, surfaceHeight: size.height) }
-                    }
-                    if pull.move(dx: value.translation.width, dy: value.translation.height) { return }
                     guard remote.connected else { return }
                     padFocused = true
                     if touchPoint == nil {
@@ -72,14 +63,7 @@ struct AppleRemoteCard<Accessory: View>: View {
                     }
                 }
                 .onEnded { value in
-                    touchStarted = false
                     withAnimation(.easeOut(duration: 0.4)) { touchPoint = nil }
-                    if pull.end(dx: value.translation.width, dy: value.translation.height) {
-                        onSwipeUpFromBottom?()
-                        navigation.reset()
-                        return
-                    }
-                    // Not a pull after all: a tap near the edge still selects.
                     guard remote.connected else { navigation.reset(); return }
                     if let command = navigation.end(x: value.translation.width, y: value.translation.height) {
                         send(command, at: value.location)
