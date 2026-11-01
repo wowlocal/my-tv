@@ -41,6 +41,7 @@ final class ControlStore: ObservableObject {
     private var tvAutoFailures = 0
     /// The latest level released while an earlier one was still being applied.
     private var queuedBrightness: Int?
+    private var volumeStepSettle: Task<Void, Never>?
     private var queuedVolume: Int?
     private var pairedHosts: [String: Bool] = [:]
 
@@ -295,6 +296,29 @@ final class ControlStore: ObservableObject {
             next = queuedVolume
             queuedVolume = nil
         }
+    }
+
+    /// One press of a hardware volume button: moves the Sonos volume by `delta` from where the
+    /// last press left it, so quick presses add up instead of restarting from a stale readback.
+    /// Readback takes over again `settle` seconds after the last press. Returns the new level,
+    /// or nil when the Sonos isn't connected (the buttons then stay with the phone).
+    @discardableResult
+    func stepVolume(by delta: Int, settle: TimeInterval = 0.8) -> Int? {
+        guard sonosConnected, sonosHost != nil else { return nil }
+        editingVolume = true
+        let target = min(max(Int(volumeDraft.rounded()) + delta, 0), 100)
+        volumeDraft = Double(target)
+        Task { await setVolume(target) }
+        volumeStepSettle?.cancel()
+        volumeStepSettle = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(settle * 1_000_000_000))
+            guard !Task.isCancelled, let self else { return }
+            self.editingVolume = false
+            // Applying finished during the burst: show the confirmed level. Otherwise the last
+            // write's readback updates the bar when it arrives.
+            if !self.applyingVolume, let volume = self.volume { self.volumeDraft = Double(volume) }
+        }
+        return target
     }
 
     private func applyVolume(_ target: Int, host: String) async {

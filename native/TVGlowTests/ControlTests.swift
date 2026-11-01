@@ -150,4 +150,36 @@ final class ControlTests: XCTestCase {
         await store.refresh()
         XCTAssertEqual(store.volumeDraft, 40, "Once released, readback shows the device level again")
     }
+
+    @MainActor
+    func testVolumeButtonPressesAddUpAndStayInRange() async throws {
+        let sonos = MockSonos()
+        sonos.delay = 100_000_000
+        let store = ControlStore(tv: MockTV(), sonos: sonos, vault: MemoryPairing(), defaults: UserDefaults(suiteName: UUID().uuidString)!)
+        await store.connectSonos()
+        XCTAssertEqual(store.stepVolume(by: 2, settle: 0.3), 47)
+        XCTAssertEqual(store.stepVolume(by: 2, settle: 0.3), 49, "a press builds on the previous press, not on readback")
+        XCTAssertEqual(store.stepVolume(by: -2, settle: 0.3), 47)
+        try await Task.sleep(nanoseconds: 700_000_000)
+        XCTAssertEqual(sonos.written.first, 47)
+        XCTAssertEqual(sonos.written.last, 47, "the latest level wins")
+        XCTAssertEqual(store.volume, 47)
+        XCTAssertEqual(store.volumeDraft, 47)
+        XCTAssertFalse(store.editingVolume, "readback takes over after the burst")
+
+        sonos.current = SonosState(volume: 99, muted: false)
+        await store.refresh()
+        XCTAssertEqual(store.stepVolume(by: 2, settle: 0.1), 100)
+        XCTAssertEqual(store.stepVolume(by: 2, settle: 0.1), 100)
+        try await Task.sleep(nanoseconds: 400_000_000)
+    }
+
+    @MainActor
+    func testVolumeButtonsAreIgnoredWithoutSonos() async {
+        let sonos = MockSonos()
+        let store = ControlStore(tv: MockTV(), sonos: sonos, vault: MemoryPairing(), defaults: UserDefaults(suiteName: UUID().uuidString)!)
+        XCTAssertNil(store.stepVolume(by: 2))
+        XCTAssertTrue(sonos.written.isEmpty)
+        XCTAssertFalse(store.editingVolume)
+    }
 }

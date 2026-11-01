@@ -21,12 +21,21 @@ struct ContentView: View {
     @State private var panelHeight = 110.0
     @GestureState private var handleTouched = false
     @Environment(\.scenePhase) private var scenePhase
+    /// Sonos level shown briefly after an iPhone volume button press.
+    @State private var volumeHUD: Int?
+    @State private var volumeHUDTask: Task<Void, Never>?
 
     var body: some View {
         VStack(spacing: 0) {
             topBar.padding(.bottom, 32)
             AppleRemoteCard(remote: remote, showDevices: { showingDevices = true }) { statusText } controls: { playbackBar }
                 .frame(maxHeight: .infinity)
+                .overlay(alignment: .top) {
+                    if let volumeHUD {
+                        VolumeHUD(level: volumeHUD, muted: store.muted).padding(.top, 16)
+                            .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .top)))
+                    }
+                }
             levels
             bottomButtons.padding(.top, 11)
         }
@@ -34,6 +43,15 @@ struct ContentView: View {
         .padding(.horizontal, 16).padding(.bottom, 15)
         .frame(maxWidth: 520).frame(maxWidth: .infinity, maxHeight: .infinity)
         .background { Color.black.ignoresSafeArea() }
+        #if os(iOS)
+        // The iPhone's volume buttons adjust the Sonos while the remote is in front.
+        .background {
+            HardwareVolumeButtons(isEnabled: scenePhase == .active && store.sonosConnected) { direction in
+                volumeButtonPressed(direction)
+            }
+            .frame(width: 1, height: 1).accessibilityHidden(true)
+        }
+        #endif
         .foregroundStyle(GlowTheme.ink).tint(GlowTheme.accent).preferredColorScheme(.dark)
         .sensoryFeedback(.impact(weight: .light, intensity: 0.7), trigger: feedback)
         .sheet(isPresented: $showingConnections) { ConnectionView(store: store) }
@@ -56,6 +74,21 @@ struct ContentView: View {
             // Opened from Control Center: show the touch surface, not settings left open earlier.
             // Pairing (the device popover) and Apple TV's keyboard stay where they are.
             showingConnections = false
+        }
+    }
+
+    // MARK: Hardware volume buttons
+
+    private static let volumeButtonStep = 2
+
+    private func volumeButtonPressed(_ direction: Int) {
+        guard let level = store.stepVolume(by: direction * Self.volumeButtonStep) else { return }
+        withAnimation(.snappy(duration: 0.2)) { volumeHUD = level }
+        volumeHUDTask?.cancel()
+        volumeHUDTask = Task {
+            try? await Task.sleep(nanoseconds: 1_400_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.35)) { volumeHUD = nil }
         }
     }
 

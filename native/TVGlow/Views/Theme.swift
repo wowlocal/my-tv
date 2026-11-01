@@ -185,6 +185,39 @@ struct TVBadge: View {
     }
 }
 
+/// The Sonos level after an iPhone volume button press, shown at the top of the touch surface.
+struct VolumeHUD: View {
+    let level: Int
+    var muted = false
+
+    private var symbol: String {
+        if muted || level == 0 { return "speaker.slash.fill" }
+        return level < 34 ? "speaker.wave.1.fill" : level < 67 ? "speaker.wave.2.fill" : "speaker.wave.3.fill"
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: symbol).font(.system(size: 14, weight: .semibold)).frame(width: 22)
+                .contentTransition(.symbolEffect(.replace))
+            Capsule().fill(.white.opacity(0.18))
+                .overlay(alignment: .leading) {
+                    GeometryReader { proxy in
+                        Capsule().fill(.white).frame(width: proxy.size.width * Double(level) / 100)
+                    }
+                }
+                .frame(width: 120, height: 6)
+            Text("\(level)").font(.system(size: 13, weight: .semibold)).monospacedDigit().frame(width: 28, alignment: .trailing)
+                .contentTransition(.numericText(value: Double(level)))
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 16).frame(height: 40)
+        .remoteGlass(Capsule())
+        .animation(.snappy(duration: 0.2), value: level)
+        .allowsHitTesting(false)
+        .accessibilityElement().accessibilityLabel("Sonos volume \(level) percent")
+    }
+}
+
 /// A plain white glyph on the touch surface, like the Remote app's playback controls.
 /// Dimmed when disabled; its tap target stays small so taps beside it still reach Apple TV.
 struct PadIconButton: View {
