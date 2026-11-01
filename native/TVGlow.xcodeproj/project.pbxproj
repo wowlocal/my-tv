@@ -17,6 +17,12 @@
 			"path" = "App/TVGlowApp.swift";
 			"sourceTree" = "<group>";
 		};
+		"3C506FD09D7AAA26C0F8EB4F" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "Core/AppleRemotePlayback.swift";
+			"sourceTree" = "<group>";
+		};
 		"09488E53BC0968D042716E72" = {
 			"isa" = "PBXFileReference";
 			"lastKnownFileType" = "sourcecode.swift";
@@ -126,6 +132,7 @@
 			"children" = (
 				"E7283409111AA78C43CD2C43",
 				"090F4A4998B0767A434E5468",
+				"3C506FD09D7AAA26C0F8EB4F",
 				"09488E53BC0968D042716E72",
 				"059AA59543761B5D3554A4F6",
 				"447EB0FBA7D179F77596763F",
@@ -157,6 +164,12 @@
 			"path" = "ControlTests.swift";
 			"sourceTree" = "<group>";
 		};
+		"4CD3F1D24469BCE75B14AE2C" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "PlaybackTests.swift";
+			"sourceTree" = "<group>";
+		};
 		"4918860C690A3CD2CC0A0E23" = {
 			"isa" = "PBXFileReference";
 			"lastKnownFileType" = "sourcecode.swift";
@@ -170,6 +183,7 @@
 			"children" = (
 				"E68CCE554880735B351430C7",
 				"B89596E3A0D1B94BA42F1C4D",
+				"4CD3F1D24469BCE75B14AE2C",
 				"4918860C690A3CD2CC0A0E23",
 			);
 		};
@@ -212,6 +226,10 @@
 		"A5130A18D643F7D01460AB4E" = {
 			"isa" = "PBXBuildFile";
 			"fileRef" = "090F4A4998B0767A434E5468";
+		};
+		"679C4BB635FC0E20154BAF93" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "3C506FD09D7AAA26C0F8EB4F";
 		};
 		"AD6D191252BF8C4689078986" = {
 			"isa" = "PBXBuildFile";
@@ -275,6 +293,7 @@
 			"files" = (
 				"C9C75DE1C50AA18E4860798D",
 				"A5130A18D643F7D01460AB4E",
+				"679C4BB635FC0E20154BAF93",
 				"AD6D191252BF8C4689078986",
 				"960A5902C5C1BAD18B01CCFD",
 				"008281EAA3859846295A086D",
@@ -448,6 +467,10 @@
 			"isa" = "PBXBuildFile";
 			"fileRef" = "090F4A4998B0767A434E5468";
 		};
+		"C469E1087B49557B77E2DCD1" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "3C506FD09D7AAA26C0F8EB4F";
+		};
 		"DEC588DAD2F634A5F88AA5D1" = {
 			"isa" = "PBXBuildFile";
 			"fileRef" = "09488E53BC0968D042716E72";
@@ -510,6 +533,7 @@
 			"files" = (
 				"5D25A16079CF17840CC32646",
 				"46929218ED671F47E58D776F",
+				"C469E1087B49557B77E2DCD1",
 				"DEC588DAD2F634A5F88AA5D1",
 				"49C4BB09FD4D6A357685B7D6",
 				"B10766B03199356876C72B72",
@@ -706,6 +730,10 @@
 			"path" = "TVGlowTests.xctest";
 			"sourceTree" = "BUILT_PRODUCTS_DIR";
 		};
+		"CC122B0A595B9659EFDCE281" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "3C506FD09D7AAA26C0F8EB4F";
+		};
 		"7F38927F4B1122E332ECB127" = {
 			"isa" = "PBXBuildFile";
 			"fileRef" = "09488E53BC0968D042716E72";
@@ -746,6 +774,10 @@
 			"isa" = "PBXBuildFile";
 			"fileRef" = "B89596E3A0D1B94BA42F1C4D";
 		};
+		"8EF14A0E485611C01DB4FB35" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "4CD3F1D24469BCE75B14AE2C";
+		};
 		"37D9A08BAF605D2B5EEB00DB" = {
 			"isa" = "PBXBuildFile";
 			"fileRef" = "4918860C690A3CD2CC0A0E23";
@@ -754,6 +786,7 @@
 			"isa" = "PBXSourcesBuildPhase";
 			"buildActionMask" = 2147483647;
 			"files" = (
+				"CC122B0A595B9659EFDCE281",
 				"7F38927F4B1122E332ECB127",
 				"1822113CA1BAD870E3628585",
 				"F9A6810DFAEB91B8F7726AC5",
@@ -764,6 +797,7 @@
 				"867443589A017F3CCAA1E96A",
 				"49E377E381B14AECE01A0CCB",
 				"F5C07911D588842D3D180BF3",
+				"8EF14A0E485611C01DB4FB35",
 				"37D9A08BAF605D2B5EEB00DB",
 			);
 			"runOnlyForDeploymentPostprocessing" = 0;

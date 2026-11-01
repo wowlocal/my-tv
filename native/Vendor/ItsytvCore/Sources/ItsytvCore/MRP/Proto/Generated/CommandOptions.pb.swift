@@ -8,6 +8,7 @@
 // For information on using the generated types, please see the documentation:
 //   https://github.com/apple/swift-protobuf/
 
+import Foundation
 import SwiftProtobuf
 
 // If the compiler emits an error on this type, it is because this file
@@ -151,6 +152,15 @@ struct MRP_CommandOptions: Sendable {
   /// Clears the value of `sendOptions`. Subsequent reads from it will return its default value.
   mutating func clearSendOptions() {self._sendOptions = nil}
 
+  var languageOption: Data {
+    get {return _languageOption ?? Data()}
+    set {_languageOption = newValue}
+  }
+  /// Returns true if `languageOption` has been explicitly set.
+  var hasLanguageOption: Bool {return self._languageOption != nil}
+  /// Clears the value of `languageOption`. Subsequent reads from it will return its default value.
+  mutating func clearLanguageOption() {self._languageOption = nil}
+
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
@@ -169,13 +179,14 @@ struct MRP_CommandOptions: Sendable {
   fileprivate var _radioStationID: Int64? = nil
   fileprivate var _radioStationHash: String? = nil
   fileprivate var _sendOptions: UInt32? = nil
+  fileprivate var _languageOption: Data? = nil
 }
 
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 extension MRP_CommandOptions: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = "CommandOptions"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\u{2}sourceId\0\u{1}mediaType\0\u{1}externalPlayerCommand\0\u{1}skipInterval\0\u{1}playbackRate\0\u{1}rating\0\u{1}negative\0\u{1}playbackPosition\0\u{1}repeatMode\0\u{1}shuffleMode\0\u{1}trackID\0\u{1}radioStationID\0\u{1}radioStationHash\0\u{2}\u{3}sendOptions\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\u{2}sourceId\0\u{1}mediaType\0\u{1}externalPlayerCommand\0\u{1}skipInterval\0\u{1}playbackRate\0\u{1}rating\0\u{1}negative\0\u{1}playbackPosition\0\u{1}repeatMode\0\u{1}shuffleMode\0\u{1}trackID\0\u{1}radioStationID\0\u{1}radioStationHash\0\u{2}\u{3}sendOptions\0\u{2}\u{a}languageOption\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -197,6 +208,7 @@ extension MRP_CommandOptions: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
       case 13: try { try decoder.decodeSingularInt64Field(value: &self._radioStationID) }()
       case 14: try { try decoder.decodeSingularStringField(value: &self._radioStationHash) }()
       case 17: try { try decoder.decodeSingularUInt32Field(value: &self._sendOptions) }()
+      case 27: try { try decoder.decodeSingularBytesField(value: &self._languageOption) }()
       default: break
       }
     }
@@ -249,6 +261,9 @@ extension MRP_CommandOptions: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
     try { if let v = self._sendOptions {
       try visitor.visitSingularUInt32Field(value: v, fieldNumber: 17)
     } }()
+    try { if let v = self._languageOption {
+      try visitor.visitSingularBytesField(value: v, fieldNumber: 27)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -267,6 +282,7 @@ extension MRP_CommandOptions: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
     if lhs._radioStationID != rhs._radioStationID {return false}
     if lhs._radioStationHash != rhs._radioStationHash {return false}
     if lhs._sendOptions != rhs._sendOptions {return false}
+    if lhs._languageOption != rhs._languageOption {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

@@ -21,6 +21,39 @@ fileprivate struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobuf.ProtobufAP
   typealias Version = _2
 }
 
+struct MRP_LanguageOptionGroup: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var allowEmptySelection: Bool {
+    get {return _allowEmptySelection ?? false}
+    set {_allowEmptySelection = newValue}
+  }
+  /// Returns true if `allowEmptySelection` has been explicitly set.
+  var hasAllowEmptySelection: Bool {return self._allowEmptySelection != nil}
+  /// Clears the value of `allowEmptySelection`. Subsequent reads from it will return its default value.
+  mutating func clearAllowEmptySelection() {self._allowEmptySelection = nil}
+
+  var defaultLanguageOption: MRP_LanguageOption {
+    get {return _defaultLanguageOption ?? MRP_LanguageOption()}
+    set {_defaultLanguageOption = newValue}
+  }
+  /// Returns true if `defaultLanguageOption` has been explicitly set.
+  var hasDefaultLanguageOption: Bool {return self._defaultLanguageOption != nil}
+  /// Clears the value of `defaultLanguageOption`. Subsequent reads from it will return its default value.
+  mutating func clearDefaultLanguageOption() {self._defaultLanguageOption = nil}
+
+  var languageOptions: [MRP_LanguageOption] = []
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+
+  fileprivate var _allowEmptySelection: Bool? = nil
+  fileprivate var _defaultLanguageOption: MRP_LanguageOption? = nil
+}
+
 struct MRP_ContentItem: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -61,6 +94,10 @@ struct MRP_ContentItem: Sendable {
   var hasInfo: Bool {return self._info != nil}
   /// Clears the value of `info`. Subsequent reads from it will return its default value.
   mutating func clearInfo() {self._info = nil}
+
+  var availableLanguageOptions: [MRP_LanguageOptionGroup] = []
+
+  var currentLanguageOptions: [MRP_LanguageOption] = []
 
   var parentIdentifier: String {
     get {return _parentIdentifier ?? String()}
@@ -134,9 +171,53 @@ struct MRP_ContentItem: Sendable {
 
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
+extension MRP_LanguageOptionGroup: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = "LanguageOptionGroup"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}allowEmptySelection\0\u{1}defaultLanguageOption\0\u{1}languageOptions\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self._allowEmptySelection) }()
+      case 2: try { try decoder.decodeSingularMessageField(value: &self._defaultLanguageOption) }()
+      case 3: try { try decoder.decodeRepeatedMessageField(value: &self.languageOptions) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._allowEmptySelection {
+      try visitor.visitSingularBoolField(value: v, fieldNumber: 1)
+    } }()
+    try { if let v = self._defaultLanguageOption {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
+    } }()
+    if !self.languageOptions.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.languageOptions, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: MRP_LanguageOptionGroup, rhs: MRP_LanguageOptionGroup) -> Bool {
+    if lhs._allowEmptySelection != rhs._allowEmptySelection {return false}
+    if lhs._defaultLanguageOption != rhs._defaultLanguageOption {return false}
+    if lhs.languageOptions != rhs.languageOptions {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
 extension MRP_ContentItem: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = "ContentItem"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}identifier\0\u{1}metadata\0\u{1}artworkData\0\u{1}info\0\u{2}\u{5}parentIdentifier\0\u{1}ancestorIdentifier\0\u{1}queueIdentifier\0\u{1}requestIdentifier\0\u{1}artworkDataWidth\0\u{1}artworkDataHeight\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}identifier\0\u{1}metadata\0\u{1}artworkData\0\u{1}info\0\u{1}availableLanguageOptions\0\u{1}currentLanguageOptions\0\u{2}\u{3}parentIdentifier\0\u{1}ancestorIdentifier\0\u{1}queueIdentifier\0\u{1}requestIdentifier\0\u{1}artworkDataWidth\0\u{1}artworkDataHeight\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -148,6 +229,8 @@ extension MRP_ContentItem: SwiftProtobuf.Message, SwiftProtobuf._MessageImplemen
       case 2: try { try decoder.decodeSingularMessageField(value: &self._metadata) }()
       case 3: try { try decoder.decodeSingularBytesField(value: &self._artworkData) }()
       case 4: try { try decoder.decodeSingularStringField(value: &self._info) }()
+      case 5: try { try decoder.decodeRepeatedMessageField(value: &self.availableLanguageOptions) }()
+      case 6: try { try decoder.decodeRepeatedMessageField(value: &self.currentLanguageOptions) }()
       case 9: try { try decoder.decodeSingularStringField(value: &self._parentIdentifier) }()
       case 10: try { try decoder.decodeSingularStringField(value: &self._ancestorIdentifier) }()
       case 11: try { try decoder.decodeSingularStringField(value: &self._queueIdentifier) }()
@@ -176,6 +259,12 @@ extension MRP_ContentItem: SwiftProtobuf.Message, SwiftProtobuf._MessageImplemen
     try { if let v = self._info {
       try visitor.visitSingularStringField(value: v, fieldNumber: 4)
     } }()
+    if !self.availableLanguageOptions.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.availableLanguageOptions, fieldNumber: 5)
+    }
+    if !self.currentLanguageOptions.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.currentLanguageOptions, fieldNumber: 6)
+    }
     try { if let v = self._parentIdentifier {
       try visitor.visitSingularStringField(value: v, fieldNumber: 9)
     } }()
@@ -202,6 +291,8 @@ extension MRP_ContentItem: SwiftProtobuf.Message, SwiftProtobuf._MessageImplemen
     if lhs._metadata != rhs._metadata {return false}
     if lhs._artworkData != rhs._artworkData {return false}
     if lhs._info != rhs._info {return false}
+    if lhs.availableLanguageOptions != rhs.availableLanguageOptions {return false}
+    if lhs.currentLanguageOptions != rhs.currentLanguageOptions {return false}
     if lhs._parentIdentifier != rhs._parentIdentifier {return false}
     if lhs._ancestorIdentifier != rhs._ancestorIdentifier {return false}
     if lhs._queueIdentifier != rhs._queueIdentifier {return false}

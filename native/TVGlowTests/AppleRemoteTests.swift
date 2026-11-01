@@ -171,6 +171,11 @@ final class MockAppleRemoteDriver: AppleRemoteDriving {
     func disconnect() { disconnections += 1; snapshot.phase = .disconnected; snapshot.canSubmitPIN = false }
     func submitPIN(_ pin: String) { pins.append(pin) }
     func press(_ command: AppleRemoteCommand) { commands.append(command) }
+    var skips: [Bool] = []
+    var subtitleCommands: [String?] = []
+    func skip(forward: Bool) { skips.append(forward) }
+    func enableSubtitle(id: String) { subtitleCommands.append(id) }
+    func disableSubtitles() { subtitleCommands.append(nil) }
     func sendText(_ text: String) { texts.append(text) }
     var paired: Set<String> = []
     var pairedLookups = 0

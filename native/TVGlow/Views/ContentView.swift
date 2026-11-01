@@ -27,9 +27,11 @@ struct ContentView: View {
             topBar.padding(.bottom, 22)
             AppleRemoteCard(remote: remote, showDevices: { showingDevices = true }) { statusText }
                 .frame(maxHeight: .infinity)
+            if showsPlayback { playbackControls.padding(.top, 12) }
             levels
             bottomButtons.padding(.top, 12)
         }
+        .animation(.snappy(duration: 0.35), value: showsPlayback)
         .padding(.horizontal, 15).padding(.top, 8).padding(.bottom, 10)
         .frame(maxWidth: 520).frame(maxWidth: .infinity, maxHeight: .infinity)
         .background { Color.black.ignoresSafeArea() }
@@ -163,6 +165,60 @@ struct ContentView: View {
             }
         }
         .animation(.easeOut(duration: 0.2), value: status)
+    }
+
+    // MARK: Now playing
+
+    private var playback: AppleRemotePlayback { remote.snapshot.playback }
+    private var showsPlayback: Bool { remote.connected && playback.hasControls }
+
+    /// Like the Remote app: while a show is loaded, skip back · subtitles · skip forward appear
+    /// under the touch surface. Each button is shown only when the player on Apple TV supports it.
+    private var playbackControls: some View {
+        GlassGroup(spacing: 22) {
+            HStack(spacing: 22) {
+                if playback.canSkipBackward {
+                    skipButton(forward: false, seconds: playback.skipBackwardInterval)
+                }
+                if !playback.subtitles.isEmpty {
+                    CircleButton(symbol: playback.subtitlesOn ? "captions.bubble.fill" : "captions.bubble", diameter: 56, glyph: 21,
+                                 highlighted: playback.subtitlesOn, pulsing: remote.subtitlesPending) {
+                        feedback += 1
+                        remote.toggleSubtitles()
+                    }
+                    .contextMenu { subtitleMenu }
+                    .accessibilityLabel(playback.subtitlesOn ? "Turn subtitles off" : "Turn subtitles on")
+                    .help("Subtitles (touch and hold to choose a language)").accessibilityIdentifier("subtitlesButton")
+                }
+                if playback.canSkipForward {
+                    skipButton(forward: true, seconds: playback.skipForwardInterval)
+                }
+            }
+            .animation(.snappy(duration: 0.3), value: playback.subtitles.isEmpty)
+        }
+        .frame(maxWidth: .infinity)
+        .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .top)))
+    }
+
+    private func skipButton(forward: Bool, seconds: Double) -> some View {
+        let title = "Skip \(forward ? "forward" : "back") \(Int(seconds.rounded())) seconds"
+        return CircleButton(symbol: AppleRemotePlayback.skipSymbol(forward: forward, seconds: seconds), diameter: 56, glyph: 21) {
+            feedback += 1
+            remote.skip(forward: forward)
+        }
+        .accessibilityLabel(title).help(title).accessibilityIdentifier(forward ? "skipForward" : "skipBackward")
+    }
+
+    @ViewBuilder
+    private var subtitleMenu: some View {
+        subtitleChoice("Off", id: nil)
+        ForEach(playback.subtitles) { track in subtitleChoice(track.name, id: track.id) }
+    }
+
+    private func subtitleChoice(_ title: String, id: String?) -> some View {
+        Button { remote.selectSubtitle(id) } label: {
+            if playback.subtitleID == id { Label(title, systemImage: "checkmark") } else { Text(title) }
+        }
     }
 
     // MARK: Volume and brightness

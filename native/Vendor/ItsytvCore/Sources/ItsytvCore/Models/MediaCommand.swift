@@ -20,6 +20,8 @@ public enum MediaCommand: Hashable, CaseIterable, Sendable {
     case advanceRepeatMode
     case changeRepeatMode
     case changeShuffleMode
+    case enableLanguageOption
+    case disableLanguageOption
 
     var mrpCommand: MRP_Command {
         switch self {
@@ -40,6 +42,8 @@ public enum MediaCommand: Hashable, CaseIterable, Sendable {
         case .advanceRepeatMode: return .advanceRepeatMode
         case .changeRepeatMode: return .changeRepeatMode
         case .changeShuffleMode: return .changeShuffleMode
+        case .enableLanguageOption: return .enableLanguageOption
+        case .disableLanguageOption: return .disableLanguageOption
         }
     }
 
@@ -62,6 +66,8 @@ public enum MediaCommand: Hashable, CaseIterable, Sendable {
         case .advanceRepeatMode: self = .advanceRepeatMode
         case .changeRepeatMode: self = .changeRepeatMode
         case .changeShuffleMode: self = .changeShuffleMode
+        case .enableLanguageOption: self = .enableLanguageOption
+        case .disableLanguageOption: self = .disableLanguageOption
         default: return nil
         }
     }

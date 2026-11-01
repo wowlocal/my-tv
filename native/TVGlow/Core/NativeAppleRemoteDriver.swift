@@ -18,8 +18,48 @@ final class NativeAppleRemoteDriver: AppleRemoteDriving {
             devices: manager.discoveredDevices.map { AppleRemoteDevice(id: $0.id, name: $0.name, model: $0.modelName) }
                 .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending },
             phase: phase, connectedName: manager.connectedDeviceName,
-            canSubmitPIN: manager.canSubmitPIN, keyboardFocused: manager.keyboardFocused
+            canSubmitPIN: manager.canSubmitPIN, keyboardFocused: manager.keyboardFocused,
+            playback: playback
         )
+    }
+
+    /// Read from MRP's now-playing state; nothing is sent to build it.
+    private var playback: AppleRemotePlayback {
+        let mrp = manager.mrpManager
+        guard manager.connectionStatus == .connected, let nowPlaying = mrp.nowPlaying else { return AppleRemotePlayback() }
+        let commands = mrp.supportedCommands
+        let canSeek = commands.contains(.seekToPlaybackPosition) && nowPlaying.elapsedTime != nil
+        var playback = AppleRemotePlayback(active: true)
+        playback.canSkipBackward = commands.contains(.skipBackward) || canSeek
+        playback.canSkipForward = commands.contains(.skipForward) || canSeek
+        playback.skipBackwardInterval = interval(.skipBackward)
+        playback.skipForwardInterval = interval(.skipForward)
+        if let options = mrp.languageOptions {
+            let resolved = SubtitleChoice.resolve(groups: options.available.map(Self.group), current: options.current.map(Self.info))
+            playback.subtitles = resolved.tracks
+            playback.subtitleID = resolved.enabledID
+            playback.defaultSubtitleID = resolved.defaultID
+        }
+        return playback
+    }
+
+    private func interval(_ command: MediaCommand) -> Double {
+        guard let seconds = manager.mrpManager.preferredSkipIntervals[command], seconds > 0, seconds <= 120 else { return 10 }
+        return seconds
+    }
+
+    private static func key(_ option: MediaLanguageOption) -> String {
+        option.identifier ?? "\(option.type ?? 0)|\(option.languageTag ?? "")|\(option.displayName ?? "")"
+    }
+
+    private static func info(_ option: MediaLanguageOption) -> LanguageOptionInfo {
+        LanguageOptionInfo(id: key(option), type: option.type.map(Int.init), languageTag: option.languageTag,
+                           displayName: option.displayName, characteristics: option.characteristics)
+    }
+
+    private static func group(_ group: MediaLanguageOptionGroup) -> LanguageGroupInfo {
+        LanguageGroupInfo(allowsEmptySelection: group.allowsEmptySelection, defaultID: group.defaultOption.map(key),
+                          options: group.options.map(info))
     }
 
     func startDiscovery() { manager.startScanning() }
@@ -45,6 +85,36 @@ final class NativeAppleRemoteDriver: AppleRemoteDriving {
         case .wake: button = .wake
         }
         manager.pressButton(button)
+    }
+
+    func skip(forward: Bool) {
+        let mrp = manager.mrpManager
+        let command: MediaCommand = forward ? .skipForward : .skipBackward
+        let seconds = interval(command)
+        if mrp.supportedCommands.contains(command) {
+            mrp.sendSkip(command, interval: Float(seconds))
+        } else if let nowPlaying = mrp.nowPlaying, mrp.supportedCommands.contains(.seekToPlaybackPosition) {
+            // Some players only take absolute seeks.
+            var target = nowPlaying.currentPosition + (forward ? seconds : -seconds)
+            if let duration = nowPlaying.duration, duration > 0 { target = min(target, duration) }
+            mrp.seekToPosition(max(0, target))
+        }
+    }
+
+    func enableSubtitle(id: String) {
+        guard let option = manager.mrpManager.languageOptions?.available.flatMap(\.options).first(where: { Self.key($0) == id }) else { return }
+        manager.mrpManager.setLanguageOption(option, enabled: true)
+    }
+
+    func disableSubtitles() {
+        guard let options = manager.mrpManager.languageOptions else { return }
+        let tracks = Set(SubtitleChoice.resolve(groups: options.available.map(Self.group), current: []).tracks.map(\.id))
+        for option in options.current {
+            let info = Self.info(option)
+            if !info.isForcedOnly && (tracks.contains(info.id) || info.isLegible) {
+                manager.mrpManager.setLanguageOption(option, enabled: false)
+            }
+        }
     }
 
     func isPaired(deviceID: String) -> Bool { KeychainStorage.load(for: deviceID) != nil }

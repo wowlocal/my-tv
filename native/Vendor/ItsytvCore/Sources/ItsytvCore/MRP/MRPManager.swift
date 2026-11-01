@@ -16,6 +16,8 @@ public final class MRPManager {
     /// Preferred skip intervals per command, as reported by the active app.
     public var preferredSkipIntervals: [MediaCommand: Double] = [:]
     public var activeAppBundleID: String?
+    /// Audio and subtitle tracks of the current item, when its app publishes them.
+    public var languageOptions: MediaLanguageOptions?
     public var onDisconnect: ((Error?) -> Void)?
     public var onReady: (() -> Void)?
     public var onKeyboardFocusChange: ((Bool) -> Void)?
@@ -57,6 +59,7 @@ public final class MRPManager {
             DispatchQueue.main.async {
                 self?.tunnel = nil
                 self?.nowPlaying = nil
+                self?.languageOptions = nil
                 self?.supportedCommands = []
                 self?.preferredSkipIntervals = [:]
                 self?.onDisconnect?(error)
@@ -88,6 +91,7 @@ public final class MRPManager {
         artworkUnavailable = false
         currentContentIdentifier = nil
         nowPlaying = nil
+        languageOptions = nil
         supportedCommands = []
         preferredSkipIntervals = [:]
         activeAppBundleID = nil
@@ -120,6 +124,28 @@ public final class MRPManager {
         message.MRP_sendCommandMessage = sendCmd
 
         tunnel?.send(message)
+    }
+
+    /// Turn an audio or subtitle track on (enable) or off (disable), then read the item's
+    /// tracks back so the remote shows what the player actually did.
+    public func setLanguageOption(_ option: MediaLanguageOption, enabled: Bool) {
+        guard let data = try? option.message.serializedData() else { return }
+        var options = MRP_CommandOptions()
+        options.languageOption = data
+
+        var sendCmd = MRP_SendCommandMessage()
+        sendCmd.command = enabled ? .enableLanguageOption : .disableLanguageOption
+        sendCmd.options = options
+
+        var message = MRP_ProtocolMessage()
+        message.type = .sendCommandMessage
+        message.MRP_sendCommandMessage = sendCmd
+
+        log.info("MRP \(enabled ? "enable" : "disable") language option \(option.identifier ?? "?") type=\(option.type ?? 0) tag=\(option.languageTag ?? "?")")
+        tunnel?.send(message)
+        for delay in [0.8, 2.5] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.refreshNowPlaying() }
+        }
     }
 
     /// Send a raw HID event (usage page + usage code + down/up).
@@ -403,7 +429,16 @@ public final class MRPManager {
 
         if state.hasPlaybackQueue {
             let queue = state.playbackQueue
-            contentItems = queue.contentItems
+            let previous = contentItems
+            // Pushed queues can leave out tracks that only our requests ask for; keep the known ones.
+            contentItems = queue.contentItems.map { item in
+                guard item.availableLanguageOptions.isEmpty, item.hasIdentifier,
+                      let old = previous.first(where: { $0.hasIdentifier && $0.identifier == item.identifier }) else { return item }
+                var merged = item
+                merged.availableLanguageOptions = old.availableLanguageOptions
+                if item.currentLanguageOptions.isEmpty { merged.currentLanguageOptions = old.currentLanguageOptions }
+                return merged
+            }
             queueLocation = queue.hasLocation ? queue.location : 0
             updateNowPlayingFromContentItems()
         }
@@ -413,6 +448,7 @@ public final class MRPManager {
             DispatchQueue.main.async {
                 if pbState == .stopped {
                     self.nowPlaying = nil
+                    self.languageOptions = nil
                 } else if var current = self.nowPlaying {
                     // Snapshot current position before changing rate
                     current.elapsedTime = current.currentPosition
@@ -435,7 +471,16 @@ public final class MRPManager {
         for item in update.contentItems {
             if item.hasIdentifier,
                let idx = contentItems.firstIndex(where: { $0.hasIdentifier && $0.identifier == item.identifier }) {
-                contentItems[idx] = item
+                // Updates can carry only what changed (say, the selected tracks); keep the rest.
+                let old = contentItems[idx]
+                var merged = item
+                if !item.hasMetadata && old.hasMetadata { merged.metadata = old.metadata }
+                if !item.hasArtworkData && old.hasArtworkData { merged.artworkData = old.artworkData }
+                if item.availableLanguageOptions.isEmpty && item.currentLanguageOptions.isEmpty {
+                    merged.availableLanguageOptions = old.availableLanguageOptions
+                    merged.currentLanguageOptions = old.currentLanguageOptions
+                }
+                contentItems[idx] = merged
             } else {
                 contentItems.append(item)
             }
@@ -463,6 +508,7 @@ public final class MRPManager {
         request.artworkWidth = 600
         request.artworkHeight = 600
         request.returnContentItemAssetsInUserCompletion = true
+        request.includeLanguageOptions = true
 
         var msg = MRP_ProtocolMessage()
         msg.type = .playbackQueueRequestMessage
@@ -480,12 +526,27 @@ public final class MRPManager {
     private func updateNowPlayingFromContentItems() {
         guard !contentItems.isEmpty else {
             currentContentIdentifier = nil
-            DispatchQueue.main.async { self.nowPlaying = nil }
+            DispatchQueue.main.async { self.nowPlaying = nil; self.languageOptions = nil }
             return
         }
 
         let index = Int(queueLocation)
         let item = index < contentItems.count ? contentItems[index] : contentItems[0]
+
+        let languages: MediaLanguageOptions? = item.availableLanguageOptions.isEmpty ? nil : MediaLanguageOptions(
+            available: item.availableLanguageOptions.map(MediaLanguageOptionGroup.init),
+            current: item.currentLanguageOptions.map(MediaLanguageOption.init)
+        )
+        DispatchQueue.main.async {
+            guard self.languageOptions != languages else { return }
+            self.languageOptions = languages
+            if let languages {
+                let groups = languages.available.map { group in
+                    "[empty=\(group.allowsEmptySelection) " + group.options.map { "\($0.type ?? 0):\($0.languageTag ?? "?")" }.joined(separator: ",") + "]"
+                }
+                log.info("MRP language options: \(groups.joined(separator: " ")) current=\(languages.current.map { $0.identifier ?? "?" })")
+            }
+        }
 
         guard item.hasMetadata else { return }
 
@@ -494,7 +555,7 @@ public final class MRPManager {
 
         guard hasContent else {
             currentContentIdentifier = nil
-            DispatchQueue.main.async { self.nowPlaying = nil }
+            DispatchQueue.main.async { self.nowPlaying = nil; self.languageOptions = nil }
             return
         }
 
