@@ -128,6 +128,10 @@ public final class MRPManager {
 
     /// Turn an audio or subtitle track on (enable) or off (disable), then read the item's
     /// tracks back so the remote shows what the player actually did.
+    ///
+    /// Warning: Apple TV's TV app (tvOS 27) disabled the audio when asked to disable a legible
+    /// option, and left the subtitles on. TV Glow switches subtitles with Companion's caption
+    /// setting (`AppleTVManager.setCaptionSetting`) instead and does not call this.
     public func setLanguageOption(_ option: MediaLanguageOption, enabled: Bool) {
         guard let data = try? option.message.serializedData() else { return }
         var options = MRP_CommandOptions()
@@ -546,12 +550,12 @@ public final class MRPManager {
             self.languageOptions = languages
             if let languages {
                 let commands = "enable=\(self.supportedCommands.contains(.enableLanguageOption)) disable=\(self.supportedCommands.contains(.disableLanguageOption))"
-                log.notice("MRP language options (\(commands)):")
+                log.info("MRP language options (\(commands)):")
                 for (index, group) in languages.available.enumerated() {
-                    log.notice("  group \(index) allowsEmpty=\(group.allowsEmptySelection) default=\(group.defaultOption?.identifier ?? "-")")
-                    for option in group.options { log.notice("    \(option.logDescription)") }
+                    log.info("  group \(index) allowsEmpty=\(group.allowsEmptySelection) default=\(group.defaultOption?.identifier ?? "-")")
+                    for option in group.options { log.info("    \(option.logDescription)") }
                 }
-                for option in languages.current { log.notice("  current \(option.logDescription)") }
+                for option in languages.current { log.info("  current \(option.logDescription)") }
             }
         }
 

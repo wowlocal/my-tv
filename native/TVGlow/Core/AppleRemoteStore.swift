@@ -153,8 +153,8 @@ protocol AppleRemoteDriving: AnyObject {
     func press(_ command: AppleRemoteCommand)
     /// Skips by the player's preferred interval (10 s when it has none).
     func skip(forward: Bool)
-    func enableSubtitle(id: String)
-    func disableSubtitles()
+    /// Switches Apple TV's subtitle setting between always on and off.
+    func toggleSubtitles()
     func sendText(_ text: String)
     /// Whether this app already holds pairing credentials for the device.
     /// Only paired devices are connected automatically; pairing always needs the user.
@@ -172,8 +172,7 @@ final class AppleRemoteStore: ObservableObject {
     @Published private(set) var hasError = false
     /// A subtitle change was sent and Apple TV hasn't reported it back yet.
     @Published private(set) var subtitlesPending = false
-    private var subtitleRequest: (target: String?, sent: Date)?
-    private static let subtitleLanguageKey = "subtitleLanguage"
+    private var subtitleRequest: (target: Bool, sent: Date)?
     private let driver: AppleRemoteDriving
     private let defaults: UserDefaults
     private var observation: Task<Void, Never>?
@@ -267,7 +266,7 @@ final class AppleRemoteStore: ObservableObject {
         if snapshot.keyboardFocused && !next.keyboardFocused { text = "" }
         if let request = subtitleRequest {
             // The button shows what Apple TV reports, so wait for its readback before settling.
-            if next.playback.subtitleID == request.target || !next.playback.active || next.phase != .connected {
+            if next.playback.subtitlesOn == request.target || !next.playback.active || next.phase != .connected {
                 subtitleRequest = nil; subtitlesPending = false
             } else if now.timeIntervalSince(request.sent) > 5 {
                 subtitleRequest = nil; subtitlesPending = false
@@ -412,29 +411,13 @@ final class AppleRemoteStore: ObservableObject {
         press(.down)
     }
 
-    /// Turns subtitles off, or on in the language picked last time (else the device's language).
+    /// Turns Apple TV's subtitles on or off, like the Remote app's button. The button follows
+    /// Apple TV's readback; it pulses until the new setting is reported.
     func toggleSubtitles(now: Date = Date()) {
         let playback = snapshot.playback
-        if playback.subtitlesOn {
-            selectSubtitle(nil, now: now)
-        } else if let track = SubtitleChoice.choose(from: playback.subtitles, preferredTag: defaults.string(forKey: Self.subtitleLanguageKey),
-                                                    defaultID: playback.defaultSubtitleID) {
-            selectSubtitle(track.id, now: now)
-        }
-    }
-
-    /// Shows the given subtitle track, or none.
-    func selectSubtitle(_ id: String?, now: Date = Date()) {
-        let playback = snapshot.playback
-        guard connected, playback.active, id != playback.subtitleID else { return }
-        if let id {
-            guard let track = playback.subtitles.first(where: { $0.id == id }) else { return }
-            driver.enableSubtitle(id: id)
-            if let tag = track.languageTag { defaults.set(tag, forKey: Self.subtitleLanguageKey) }
-        } else {
-            driver.disableSubtitles()
-        }
-        subtitleRequest = (id, now)
+        guard connected, playback.canToggleSubtitles else { return }
+        driver.toggleSubtitles()
+        subtitleRequest = (!playback.subtitlesOn, now)
         subtitlesPending = true
         notice = nil; hasError = false
     }

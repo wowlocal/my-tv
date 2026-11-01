@@ -2,31 +2,53 @@ import XCTest
 
 @MainActor
 final class PlaybackTests: XCTestCase {
-    private let english = SubtitleTrack(id: "en", name: "English", languageTag: "en")
-    private let german = SubtitleTrack(id: "de", name: "Deutsch", languageTag: "de-DE")
+    private typealias Flag = AppleRemotePlayback.Flag
 
-    private func connectedStore(_ driver: MockAppleRemoteDriver, playback: AppleRemotePlayback,
-                                defaults: UserDefaults = UserDefaults(suiteName: UUID().uuidString)!) -> AppleRemoteStore {
-        let store = AppleRemoteStore(driver: driver, defaults: defaults)
+    private func connectedStore(_ driver: MockAppleRemoteDriver, playback: AppleRemotePlayback) -> AppleRemoteStore {
+        let store = AppleRemoteStore(driver: driver, defaults: UserDefaults(suiteName: UUID().uuidString)!)
         driver.snapshot.phase = .connected
         driver.snapshot.playback = playback
         store.synchronize()
         return store
     }
 
-    private func showPlayback(subtitleID: String? = nil) -> AppleRemotePlayback {
-        AppleRemotePlayback(active: true, canSkipBackward: true, canSkipForward: true,
-                            subtitles: [english, german], subtitleID: subtitleID)
+    private func showPlayback(subtitlesOn: Bool = false) -> AppleRemotePlayback {
+        AppleRemotePlayback(active: true, canSkipBackward: true, canSkipForward: true, canToggleSubtitles: true, subtitlesOn: subtitlesOn)
     }
 
-    // MARK: Row visibility
+    // MARK: Following the player on screen
 
-    func testRowOnlyAppearsWhileSomethingWithControlsIsLoaded() {
-        XCTAssertFalse(AppleRemotePlayback().hasControls)
-        XCTAssertFalse(AppleRemotePlayback(active: true).hasControls, "music without skip or subtitles shows no row")
-        XCTAssertFalse(AppleRemotePlayback(active: false, canSkipForward: true).hasControls)
-        XCTAssertTrue(AppleRemotePlayback(active: true, canSkipBackward: true).hasControls)
-        XCTAssertTrue(AppleRemotePlayback(active: true, subtitles: [english]).hasControls)
+    func testRowFollowsCompanionFlagsLikeTheRemoteApp() {
+        let playing = AppleRemotePlayback.make(flags: Flag.play | Flag.pause | Flag.skipForward | Flag.skipBackward | 0x100,
+                                               nowPlaying: true, mrpSkipBackward: false, mrpSkipForward: false, captionSetting: 3)
+        XCTAssertTrue(playing.active)
+        XCTAssertTrue(playing.canSkipBackward && playing.canSkipForward)
+        XCTAssertTrue(playing.canToggleSubtitles)
+        XCTAssertFalse(playing.subtitlesOn)
+
+        // Back on the shows grid: Apple TV clears the playback bits (volume may stay), even though
+        // MRP still remembers the paused episode.
+        let grid = AppleRemotePlayback.make(flags: 0x100, nowPlaying: true, mrpSkipBackward: true, mrpSkipForward: true, captionSetting: 3)
+        XCTAssertFalse(grid.active)
+        XCTAssertFalse(grid.hasControls)
+        XCTAssertFalse(grid.canSkipBackward || grid.canSkipForward || grid.canToggleSubtitles)
+    }
+
+    func testMRPStandsInUntilAppleTVSendsFlags() {
+        XCTAssertTrue(AppleRemotePlayback.make(flags: nil, nowPlaying: true, mrpSkipBackward: true, mrpSkipForward: false, captionSetting: nil).active)
+        let idle = AppleRemotePlayback.make(flags: nil, nowPlaying: false, mrpSkipBackward: true, mrpSkipForward: true, captionSetting: 2)
+        XCTAssertFalse(idle.active)
+        XCTAssertFalse(idle.canSkipBackward)
+        XCTAssertFalse(idle.canToggleSubtitles)
+    }
+
+    func testSubtitlesFollowAppleTVsSetting() {
+        let on = AppleRemotePlayback.make(flags: Flag.play, nowPlaying: true, mrpSkipBackward: false, mrpSkipForward: false, captionSetting: 2)
+        XCTAssertTrue(on.subtitlesOn)
+        XCTAssertTrue(on.canToggleSubtitles)
+        XCTAssertFalse(on.canSkipForward, "no skip bit and no MRP skip")
+        let unknown = AppleRemotePlayback.make(flags: Flag.play, nowPlaying: true, mrpSkipBackward: false, mrpSkipForward: false, captionSetting: nil)
+        XCTAssertFalse(unknown.canToggleSubtitles, "dimmed until Apple TV reports its setting")
     }
 
     func testSkipSymbolsOnlyUseIntervalsSFSymbolsDraws() {
@@ -36,7 +58,7 @@ final class PlaybackTests: XCTestCase {
         XCTAssertEqual(AppleRemotePlayback.skipSymbol(forward: true, seconds: 10.5), "goforward")
     }
 
-    // MARK: Skipping
+    // MARK: Buttons
 
     func testSkipIsSentOnlyWhenConnectedAndSupported() {
         let driver = MockAppleRemoteDriver()
@@ -64,137 +86,41 @@ final class PlaybackTests: XCTestCase {
         XCTAssertEqual(driver.commands, [.down])
     }
 
-    // MARK: Subtitles
-
-    func testTurningSubtitlesOnPrefersTheLanguagePickedLastTime() {
-        let defaults = UserDefaults(suiteName: UUID().uuidString)!
-        let driver = MockAppleRemoteDriver()
-        let store = connectedStore(driver, playback: showPlayback(subtitleID: "de"), defaults: defaults)
-        defer { store.stop() }
-        store.selectSubtitle(nil)
-        XCTAssertEqual(driver.subtitleCommands, [nil])
-
-        driver.snapshot.playback.subtitleID = nil
-        store.synchronize()
-        store.selectSubtitle("de")
-        driver.snapshot.playback.subtitleID = "de"
-        store.synchronize()
-        driver.snapshot.playback.subtitleID = nil
-        store.synchronize()
-        store.toggleSubtitles()
-        XCTAssertEqual(driver.subtitleCommands, [nil, "de", "de"])
-    }
-
-    func testToggleTurnsSubtitlesOffWhenOn() {
-        let driver = MockAppleRemoteDriver()
-        let store = connectedStore(driver, playback: showPlayback(subtitleID: "en"))
-        defer { store.stop() }
-        store.toggleSubtitles()
-        XCTAssertEqual(driver.subtitleCommands, [nil])
-    }
-
-    func testPendingStateFollowsReadbackAndReportsAnUnchangedPlayer() {
+    func testSubtitleTogglePendsUntilAppleTVReportsTheNewSetting() {
         let driver = MockAppleRemoteDriver()
         let start = Date()
-        let store = connectedStore(driver, playback: showPlayback())
+        let store = connectedStore(driver, playback: showPlayback(subtitlesOn: false))
         defer { store.stop() }
-        store.selectSubtitle("en", now: start)
+        store.toggleSubtitles(now: start)
+        XCTAssertEqual(driver.subtitleToggles, 1)
         XCTAssertTrue(store.subtitlesPending)
-        store.selectSubtitle("en", now: start)
-        XCTAssertEqual(driver.subtitleCommands, ["en", "en"], "a repeat tap re-sends; nothing is queued")
 
-        driver.snapshot.playback.subtitleID = "en"
+        driver.snapshot.playback.subtitlesOn = true
         store.synchronize(now: start.addingTimeInterval(1))
         XCTAssertFalse(store.subtitlesPending)
         XCTAssertFalse(store.hasError)
 
-        store.selectSubtitle(nil, now: start.addingTimeInterval(2))
+        store.toggleSubtitles(now: start.addingTimeInterval(2))
         store.synchronize(now: start.addingTimeInterval(3))
         XCTAssertTrue(store.subtitlesPending, "still waiting for Apple TV")
         store.synchronize(now: start.addingTimeInterval(8))
         XCTAssertFalse(store.subtitlesPending)
-        XCTAssertTrue(store.hasError, "a player that ignored the change is reported")
+        XCTAssertTrue(store.hasError, "a setting that never changed is reported")
     }
 
-    func testSubtitlesAreNotSentOfflineOrForUnknownTracks() {
+    func testSubtitlesAreNotSentOfflineOrBeforeAppleTVReportsItsSetting() {
         let driver = MockAppleRemoteDriver()
-        let store = connectedStore(driver, playback: showPlayback())
+        var playback = showPlayback()
+        playback.canToggleSubtitles = false
+        let store = connectedStore(driver, playback: playback)
         defer { store.stop() }
-        store.selectSubtitle("fr")
-        XCTAssertTrue(driver.subtitleCommands.isEmpty)
-        store.selectSubtitle(nil)
-        XCTAssertTrue(driver.subtitleCommands.isEmpty, "already off")
+        store.toggleSubtitles()
+        XCTAssertEqual(driver.subtitleToggles, 0)
+
+        driver.snapshot.playback = showPlayback()
         driver.snapshot.phase = .disconnected
         store.synchronize()
         store.toggleSubtitles()
-        XCTAssertTrue(driver.subtitleCommands.isEmpty)
-    }
-
-    // MARK: Choosing tracks
-
-    func testChoiceOrder() {
-        let tracks = [german, english]
-        XCTAssertEqual(SubtitleChoice.choose(from: tracks, preferredTag: "de-DE", defaultID: "en", languages: ["en-US"])?.id, "de")
-        XCTAssertEqual(SubtitleChoice.choose(from: tracks, preferredTag: "de", defaultID: "en", languages: ["en-US"])?.id, "de",
-                       "a picked language matches regional variants")
-        XCTAssertEqual(SubtitleChoice.choose(from: tracks, preferredTag: nil, defaultID: "de", languages: ["en-GB"])?.id, "en")
-        XCTAssertEqual(SubtitleChoice.choose(from: tracks, preferredTag: nil, defaultID: "en", languages: ["ja"])?.id, "en")
-        XCTAssertEqual(SubtitleChoice.choose(from: tracks, preferredTag: nil, defaultID: nil, languages: ["ja"])?.id, "de")
-        XCTAssertNil(SubtitleChoice.choose(from: [], preferredTag: "en", defaultID: nil, languages: ["en"]))
-    }
-
-    // MARK: Reading the player's language options
-
-    private let audioEN = LanguageOptionInfo(id: "a-en", type: nil, languageTag: "en", displayName: "English")
-    private let audioDE = LanguageOptionInfo(id: "a-de", type: 0, languageTag: "de", displayName: "Deutsch")
-    private let subEN = LanguageOptionInfo(id: "s-en", type: 1, languageTag: "en", displayName: "English CC",
-                                           characteristics: ["public.accessibility.transcribes-spoken-dialog"])
-    private let subDE = LanguageOptionInfo(id: "s-de", type: 1, languageTag: "de", displayName: "Deutsch")
-    private let forced = LanguageOptionInfo(id: "s-forced", type: 1, languageTag: "en", displayName: "English Forced",
-                                            characteristics: [LanguageOptionInfo.forcedOnly])
-
-    private var groups: [LanguageGroupInfo] {
-        [LanguageGroupInfo(allowsEmptySelection: false, defaultID: "a-en", options: [audioEN, audioDE]),
-         LanguageGroupInfo(allowsEmptySelection: true, defaultID: "s-de", options: [subEN, forced, subDE])]
-    }
-
-    func testOnlySubtitleTracksAreOfferedAndAudioIsNever() {
-        let resolved = SubtitleChoice.resolve(groups: groups, current: [audioEN])
-        XCTAssertEqual(resolved.tracks.map(\.id), ["s-en", "s-de"], "audio and forced-only tracks are left out")
-        XCTAssertEqual(resolved.tracks.first?.name, "English CC")
-        XCTAssertNil(resolved.enabledID)
-        XCTAssertEqual(resolved.defaultID, "s-de")
-    }
-
-    func testForcedSubtitlesDoNotCountAsOn() {
-        XCTAssertNil(SubtitleChoice.resolve(groups: groups, current: [audioEN, forced]).enabledID)
-        XCTAssertEqual(SubtitleChoice.resolve(groups: groups, current: [audioDE, subDE]).enabledID, "s-de")
-    }
-
-    func testAudioIsNeverTreatedAsSubtitlesEvenInAGroupThatAllowsNoSelection() {
-        // Regression: an audio group marked allowsEmptySelection made the sound track look like
-        // subtitles, so "subtitles off" disabled the audio.
-        let audioGroup = LanguageGroupInfo(allowsEmptySelection: true, defaultID: "a-en", options: [audioEN, audioDE])
-        let resolved = SubtitleChoice.resolve(groups: [audioGroup], current: [audioEN])
-        XCTAssertTrue(resolved.tracks.isEmpty)
-        XCTAssertNil(resolved.enabledID)
-        XCTAssertNil(resolved.defaultID)
-        XCTAssertTrue(SubtitleChoice.shownSubtitles(in: [audioEN, audioDE]).isEmpty, "turning subtitles off never touches audio")
-        XCTAssertEqual(SubtitleChoice.shownSubtitles(in: [audioEN, subDE, forced]).map(\.id), ["s-de"])
-    }
-
-    func testOnlyExplicitlyLegibleOptionsAreSubtitles() {
-        let untyped = LanguageOptionInfo(id: "x", type: nil, languageTag: "fr")
-        XCTAssertTrue(SubtitleChoice.resolve(groups: [LanguageGroupInfo(allowsEmptySelection: true, options: [untyped])], current: [untyped]).tracks.isEmpty)
-        XCTAssertEqual(SubtitleChoice.resolve(groups: [LanguageGroupInfo(allowsEmptySelection: false, options: [subDE])], current: []).tracks.map(\.id), ["s-de"])
-        let mixed = LanguageGroupInfo(options: [audioEN, subEN])
-        XCTAssertEqual(SubtitleChoice.resolve(groups: [mixed], current: [audioEN]).tracks.map(\.id), ["s-en"])
-        XCTAssertNil(SubtitleChoice.resolve(groups: [mixed], current: [audioEN]).enabledID)
-    }
-
-    func testTrackNamesFallBackToTheLanguage() {
-        let unnamed = LanguageOptionInfo(id: "n", type: 1, languageTag: "fr")
-        let name = SubtitleChoice.resolve(groups: [LanguageGroupInfo(options: [unnamed])], current: []).tracks.first?.name
-        XCTAssertEqual(name, Locale.current.localizedString(forIdentifier: "fr"))
+        XCTAssertEqual(driver.subtitleToggles, 0)
     }
 }

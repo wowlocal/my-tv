@@ -23,43 +23,24 @@ final class NativeAppleRemoteDriver: AppleRemoteDriving {
         )
     }
 
-    /// Read from MRP's now-playing state; nothing is sent to build it.
+    /// Read from Companion's media-control flags and subtitle setting, and MRP's now-playing
+    /// state; nothing is sent to build it.
     private var playback: AppleRemotePlayback {
+        guard manager.connectionStatus == .connected else { return AppleRemotePlayback() }
         let mrp = manager.mrpManager
-        guard manager.connectionStatus == .connected, let nowPlaying = mrp.nowPlaying else { return AppleRemotePlayback() }
         let commands = mrp.supportedCommands
-        let canSeek = commands.contains(.seekToPlaybackPosition) && nowPlaying.elapsedTime != nil
-        var playback = AppleRemotePlayback(active: true)
-        playback.canSkipBackward = commands.contains(.skipBackward) || canSeek
-        playback.canSkipForward = commands.contains(.skipForward) || canSeek
-        playback.skipBackwardInterval = interval(.skipBackward)
-        playback.skipForwardInterval = interval(.skipForward)
-        if let options = mrp.languageOptions {
-            let resolved = SubtitleChoice.resolve(groups: options.available.map(Self.group), current: options.current.map(Self.info))
-            playback.subtitles = resolved.tracks
-            playback.subtitleID = resolved.enabledID
-            playback.defaultSubtitleID = resolved.defaultID
-        }
-        return playback
+        let canSeek = commands.contains(.seekToPlaybackPosition) && mrp.nowPlaying?.elapsedTime != nil
+        return AppleRemotePlayback.make(
+            flags: manager.mediaControlFlags, nowPlaying: mrp.nowPlaying != nil,
+            mrpSkipBackward: commands.contains(.skipBackward) || canSeek,
+            mrpSkipForward: commands.contains(.skipForward) || canSeek,
+            skipBackwardInterval: interval(.skipBackward), skipForwardInterval: interval(.skipForward),
+            captionSetting: manager.captionSetting)
     }
 
     private func interval(_ command: MediaCommand) -> Double {
         guard let seconds = manager.mrpManager.preferredSkipIntervals[command], seconds > 0, seconds <= 120 else { return 10 }
         return seconds
-    }
-
-    private static func key(_ option: MediaLanguageOption) -> String {
-        option.identifier ?? "\(option.type ?? 0)|\(option.languageTag ?? "")|\(option.displayName ?? "")"
-    }
-
-    private static func info(_ option: MediaLanguageOption) -> LanguageOptionInfo {
-        LanguageOptionInfo(id: key(option), type: option.type.map(Int.init), languageTag: option.languageTag,
-                           displayName: option.displayName, characteristics: option.characteristics)
-    }
-
-    private static func group(_ group: MediaLanguageOptionGroup) -> LanguageGroupInfo {
-        LanguageGroupInfo(allowsEmptySelection: group.allowsEmptySelection, defaultID: group.defaultOption.map(key),
-                          options: group.options.map(info))
     }
 
     func startDiscovery() { manager.startScanning() }
@@ -101,19 +82,9 @@ final class NativeAppleRemoteDriver: AppleRemoteDriving {
         }
     }
 
-    func enableSubtitle(id: String) {
-        guard let option = manager.mrpManager.languageOptions?.available.flatMap(\.options).first(where: { Self.key($0) == id }),
-              Self.info(option).isLegible else { return }
-        manager.mrpManager.setLanguageOption(option, enabled: true)
-    }
-
-    func disableSubtitles() {
-        guard let current = manager.mrpManager.languageOptions?.current else { return }
-        let shown = Set(SubtitleChoice.shownSubtitles(in: current.map(Self.info)).map(\.id))
-        for option in current where shown.contains(Self.key(option)) {
-            manager.mrpManager.setLanguageOption(option, enabled: false)
-        }
-    }
+    /// Toggles Apple TV's subtitle setting the way Apple's Remote app does. Unlike switching
+    /// MRP language options (which muted the TV app's audio), this never touches audio.
+    func toggleSubtitles() { manager.setCaptionSetting(AppleRemotePlayback.Captions.toggle) }
 
     func isPaired(deviceID: String) -> Bool { KeychainStorage.load(for: deviceID) != nil }
 

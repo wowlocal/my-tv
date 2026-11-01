@@ -190,10 +190,9 @@ struct ContentView: View {
                     feedback += 1
                     remote.toggleSubtitles()
                 }
-                .disabled(playback.subtitles.isEmpty)
-                .contextMenu { subtitleMenu }
+                .disabled(!playback.canToggleSubtitles)
                 .accessibilityLabel(playback.subtitlesOn ? "Turn subtitles off" : "Turn subtitles on")
-                .help("Subtitles (touch and hold to choose a language)").accessibilityIdentifier("subtitlesButton")
+                .help("Subtitles").accessibilityIdentifier("subtitlesButton")
                 Spacer(minLength: 0)
                 skipButton(forward: true, seconds: playback.skipForwardInterval, enabled: playback.canSkipForward)
             }
@@ -210,18 +209,6 @@ struct ContentView: View {
         }
         .disabled(!enabled)
         .accessibilityLabel(title).help(title).accessibilityIdentifier(forward ? "skipForward" : "skipBackward")
-    }
-
-    @ViewBuilder
-    private var subtitleMenu: some View {
-        subtitleChoice("Off", id: nil)
-        ForEach(playback.subtitles) { track in subtitleChoice(track.name, id: track.id) }
-    }
-
-    private func subtitleChoice(_ title: String, id: String?) -> some View {
-        Button { remote.selectSubtitle(id) } label: {
-            if playback.subtitleID == id { Label(title, systemImage: "checkmark") } else { Text(title) }
-        }
     }
 
     // MARK: Volume and brightness

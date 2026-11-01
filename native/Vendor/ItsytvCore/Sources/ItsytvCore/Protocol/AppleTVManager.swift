@@ -95,6 +95,13 @@ public final class AppleTVManager {
     public var isScanning = false
     public var installedApps: [(bundleID: String, name: String)] = []
     public var keyboardFocused = false
+    /// Companion media-control flags (`_iMC` event, `_mcF`): what the app playing on Apple TV
+    /// supports right now, as computed by Apple TV's rapportd from MediaRemote's supported
+    /// commands. Apple's Remote app shows its playback controls from these. nil until Apple TV
+    /// has sent one on this connection (it only sends them when they change).
+    public var mediaControlFlags: UInt64?
+    /// Apple TV's system subtitle setting, from Companion `_mcc` 12 (`_mcs`). 2 means always on.
+    public var captionSetting: Int?
     public var mrpManager = MRPManager()
     public var keyboardBlinkButton: CompanionButton = .select
     public var keyboardBlinkCounter = 0
@@ -263,6 +270,8 @@ public final class AppleTVManager {
         isReconnecting = false
         installedApps = []
         osVersion = nil
+        mediaControlFlags = nil
+        captionSetting = nil
         if clearPendingCommands {
             pendingCompanionCommands.removeAll()
         }
@@ -797,6 +806,7 @@ public final class AppleTVManager {
             }
             self?.connection?.startKeepAlive()
             self?.connection?.startTouchSession()
+            self?.startMediaControlUpdates()
             // Start text input listener (like pyatv does on connect)
             self?.connection?.startTextInput { [weak self] response in
                 if let content = response["_c"],
@@ -825,6 +835,54 @@ public final class AppleTVManager {
                 proceed()
             }
         }
+    }
+
+    // MARK: - Media control and captions (TV Glow)
+
+    /// Subscribes to `_iMC` media-control flag events and reads the subtitle setting. Read-only.
+    private func startMediaControlUpdates() {
+        connection?.sendEvent(name: "_interest", content: .dictionary([("_regEvents", .array([.string("_iMC")]))]))
+        refreshCaptionSetting()
+    }
+
+    /// Reads Apple TV's subtitle setting (`_mcc` 12, GetCaptionSettings). Changes nothing.
+    public func refreshCaptionSetting() {
+        connection?.sendRequest(eventName: "_mcc", content: .dictionary([("_mcc", .int(12))]), responseHandler: { [weak self] response in
+            let value = response["_c"]?["_mcs"]?.intValue
+            log.notice("Companion caption setting: \(value.map(String.init) ?? "none") (\(Self.describe(response)))")
+            DispatchQueue.main.async { self?.captionSetting = value.map(Int.init) }
+        })
+    }
+
+    /// Changes Apple TV's subtitle setting like Apple's Remote app (`_mcc` 13, SetCaptionSettings).
+    /// `_mcs`: 1 automatic, 2 always on, 3 off (forced only), 4 toggle always on / off.
+    /// It switches the system preference, not a track, so audio is never affected.
+    public func setCaptionSetting(_ value: Int) {
+        performOrQueueCompanionCommand { [weak self] in
+            log.notice("Companion set caption setting \(value)")
+            self?.connection?.sendRequest(eventName: "_mcc", content: .dictionary([("_mcc", .int(13)), ("_mcs", .int(Int64(value)))]),
+                                          responseHandler: { response in
+                log.notice("Companion set caption reply: \(Self.describe(response))")
+                DispatchQueue.main.async { self?.refreshCaptionSetting() }
+            })
+        }
+    }
+
+    private func handleMediaControlEvent(_ message: OPACK.Value) {
+        guard let flags = message["_c"]?["_mcF"]?.intValue else { return }
+        log.notice("Companion media control flags: 0x\(String(flags, radix: 16))")
+        DispatchQueue.main.async {
+            let changed = self.mediaControlFlags != UInt64(flags)
+            self.mediaControlFlags = UInt64(flags)
+            // The player changed (started, stopped, switched app); its subtitles may have too.
+            if changed { self.refreshCaptionSetting() }
+        }
+    }
+
+    /// Keys and simple values only, for diagnostics.
+    private static func describe(_ message: OPACK.Value) -> String {
+        guard let pairs = message["_c"]?.dictValue else { return "no content" + (message["_em"].map { " error=\($0)" } ?? "") }
+        return pairs.map { "\($0.key.stringValue ?? "?")=\($0.value.intValue.map(String.init) ?? $0.value.stringValue ?? "…")" }.joined(separator: " ")
     }
 
     private func reconnectCompanion() {
@@ -1002,6 +1060,7 @@ public final class AppleTVManager {
         case CompanionMessageType.event.rawValue:
             let eventName = message["_i"]?.stringValue
             log.debug("Event: \(eventName ?? "?")")
+            if eventName == "_iMC" { handleMediaControlEvent(message) }
 
         case CompanionMessageType.response.rawValue:
             let xid = message["_x"]?.intValue ?? -1
