@@ -105,6 +105,8 @@ for platform,target in zip(['macOS','iOS'],targets):
 </Scheme>'''
  (schemedir/(name+'.xcscheme')).write_text(xml)
 info={'CFBundleDevelopmentRegion':'en','CFBundleDisplayName':'$(APP_DISPLAY_NAME)','CFBundleExecutable':'$(EXECUTABLE_NAME)','CFBundleIdentifier':'$(PRODUCT_BUNDLE_IDENTIFIER)','CFBundleInfoDictionaryVersion':'6.0','CFBundleName':'$(APP_DISPLAY_NAME)','CFBundlePackageType':'APPL','CFBundleShortVersionString':'$(MARKETING_VERSION)','CFBundleVersion':'$(CURRENT_PROJECT_VERSION)','ITSAppUsesNonExemptEncryption':False,'LSApplicationCategoryType':'public.app-category.utilities','NSLocalNetworkUsageDescription':'TV Glow connects to your LG TV, Apple TV and Sonos soundbar for remote control, brightness and volume.','NSBonjourServices':['_companion-link._tcp','_airplay._tcp','_mediaremotetv._tcp'],'NSAppTransportSecurity':{'NSAllowsLocalNetworking':True},'NSHighResolutionCapable':True,'UILaunchScreen':{},'UISupportedInterfaceOrientations':['UIInterfaceOrientationPortrait','UIInterfaceOrientationLandscapeLeft','UIInterfaceOrientationLandscapeRight']}
+# ProMotion: without this, iPhone apps' own animations (springs, TimelineView, drags) are capped at 60 fps.
+info['CADisableMinimumFrameDurationOnPhone']=True
 info['NSLocalNetworkUsageDescription']='TV Glow connects to your LG TV, Apple TV and Sonos soundbar for remote control, brightness and volume.'
 info['NSBonjourServices']=['_companion-link._tcp','_airplay._tcp','_mediaremotetv._tcp']
 (ROOT/'TVGlow/Config/Info.plist').write_bytes(plistlib.dumps(info))
