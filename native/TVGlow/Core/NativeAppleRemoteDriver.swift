@@ -102,18 +102,16 @@ final class NativeAppleRemoteDriver: AppleRemoteDriving {
     }
 
     func enableSubtitle(id: String) {
-        guard let option = manager.mrpManager.languageOptions?.available.flatMap(\.options).first(where: { Self.key($0) == id }) else { return }
+        guard let option = manager.mrpManager.languageOptions?.available.flatMap(\.options).first(where: { Self.key($0) == id }),
+              Self.info(option).isLegible else { return }
         manager.mrpManager.setLanguageOption(option, enabled: true)
     }
 
     func disableSubtitles() {
-        guard let options = manager.mrpManager.languageOptions else { return }
-        let tracks = Set(SubtitleChoice.resolve(groups: options.available.map(Self.group), current: []).tracks.map(\.id))
-        for option in options.current {
-            let info = Self.info(option)
-            if !info.isForcedOnly && (tracks.contains(info.id) || info.isLegible) {
-                manager.mrpManager.setLanguageOption(option, enabled: false)
-            }
+        guard let current = manager.mrpManager.languageOptions?.current else { return }
+        let shown = Set(SubtitleChoice.shownSubtitles(in: current.map(Self.info)).map(\.id))
+        for option in current where shown.contains(Self.key(option)) {
+            manager.mrpManager.setLanguageOption(option, enabled: false)
         }
     }
 

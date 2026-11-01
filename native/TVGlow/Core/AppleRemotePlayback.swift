@@ -45,18 +45,18 @@ struct LanguageOptionInfo: Equatable {
     var displayName: String?
     var characteristics: [String] = []
 
+    /// Only an explicit legible type marks a subtitle. Audio is type 0, which protobuf may omit.
     var isLegible: Bool { type == Self.legibleType }
     /// Forced subtitles only translate foreign-language lines; they don't count as subtitles on.
     var isForcedOnly: Bool { characteristics.contains(Self.forcedOnly) }
 }
 
 struct LanguageGroupInfo: Equatable {
+    /// Not used to find subtitles: players can set it on audio groups too, and treating
+    /// audio as subtitles meant "subtitles off" switched the sound off.
     var allowsEmptySelection = false
     var defaultID: String?
     var options: [LanguageOptionInfo]
-
-    /// Subtitles can be switched off; audio can't. Either signal marks the subtitle group.
-    var isLegible: Bool { allowsEmptySelection || options.contains(where: \.isLegible) }
 }
 
 enum SubtitleChoice {
@@ -64,17 +64,21 @@ enum SubtitleChoice {
     static func resolve(groups: [LanguageGroupInfo], current: [LanguageOptionInfo]) -> (tracks: [SubtitleTrack], enabledID: String?, defaultID: String?) {
         var tracks: [SubtitleTrack] = []
         var defaultID: String?
-        for group in groups where group.isLegible {
-            if defaultID == nil, let id = group.defaultID, group.options.contains(where: { $0.id == id && !$0.isForcedOnly }) { defaultID = id }
-            for option in group.options where !option.isForcedOnly && !tracks.contains(where: { $0.id == option.id }) {
+        for group in groups {
+            if defaultID == nil, let id = group.defaultID, group.options.contains(where: { $0.id == id && isSubtitle($0) }) { defaultID = id }
+            for option in group.options where isSubtitle(option) && !tracks.contains(where: { $0.id == option.id }) {
                 tracks.append(SubtitleTrack(id: option.id, name: name(of: option), languageTag: option.languageTag))
             }
         }
-        let enabled = current.first { option in
-            !option.isForcedOnly && (tracks.contains { $0.id == option.id } || option.isLegible)
-        }
-        return (tracks, enabled?.id, defaultID)
+        return (tracks, shownSubtitles(in: current).first?.id, defaultID)
     }
+
+    /// The selected options that are subtitles: what "subtitles off" disables. Never audio.
+    static func shownSubtitles(in current: [LanguageOptionInfo]) -> [LanguageOptionInfo] {
+        current.filter(isSubtitle)
+    }
+
+    private static func isSubtitle(_ option: LanguageOptionInfo) -> Bool { option.isLegible && !option.isForcedOnly }
 
     /// The track to turn on: the language picked last time, then the device's languages,
     /// then the player's default, then the first one.

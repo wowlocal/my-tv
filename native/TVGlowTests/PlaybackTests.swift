@@ -171,11 +171,25 @@ final class PlaybackTests: XCTestCase {
         XCTAssertEqual(SubtitleChoice.resolve(groups: groups, current: [audioDE, subDE]).enabledID, "s-de")
     }
 
-    func testEitherSignalMarksTheSubtitleGroup() {
+    func testAudioIsNeverTreatedAsSubtitlesEvenInAGroupThatAllowsNoSelection() {
+        // Regression: an audio group marked allowsEmptySelection made the sound track look like
+        // subtitles, so "subtitles off" disabled the audio.
+        let audioGroup = LanguageGroupInfo(allowsEmptySelection: true, defaultID: "a-en", options: [audioEN, audioDE])
+        let resolved = SubtitleChoice.resolve(groups: [audioGroup], current: [audioEN])
+        XCTAssertTrue(resolved.tracks.isEmpty)
+        XCTAssertNil(resolved.enabledID)
+        XCTAssertNil(resolved.defaultID)
+        XCTAssertTrue(SubtitleChoice.shownSubtitles(in: [audioEN, audioDE]).isEmpty, "turning subtitles off never touches audio")
+        XCTAssertEqual(SubtitleChoice.shownSubtitles(in: [audioEN, subDE, forced]).map(\.id), ["s-de"])
+    }
+
+    func testOnlyExplicitlyLegibleOptionsAreSubtitles() {
         let untyped = LanguageOptionInfo(id: "x", type: nil, languageTag: "fr")
-        XCTAssertEqual(SubtitleChoice.resolve(groups: [LanguageGroupInfo(allowsEmptySelection: true, options: [untyped])], current: []).tracks.map(\.id), ["x"])
+        XCTAssertTrue(SubtitleChoice.resolve(groups: [LanguageGroupInfo(allowsEmptySelection: true, options: [untyped])], current: [untyped]).tracks.isEmpty)
         XCTAssertEqual(SubtitleChoice.resolve(groups: [LanguageGroupInfo(allowsEmptySelection: false, options: [subDE])], current: []).tracks.map(\.id), ["s-de"])
-        XCTAssertTrue(SubtitleChoice.resolve(groups: [LanguageGroupInfo(allowsEmptySelection: false, options: [audioEN, audioDE])], current: [audioEN]).tracks.isEmpty)
+        let mixed = LanguageGroupInfo(options: [audioEN, subEN])
+        XCTAssertEqual(SubtitleChoice.resolve(groups: [mixed], current: [audioEN]).tracks.map(\.id), ["s-en"])
+        XCTAssertNil(SubtitleChoice.resolve(groups: [mixed], current: [audioEN]).enabledID)
     }
 
     func testTrackNamesFallBackToTheLanguage() {

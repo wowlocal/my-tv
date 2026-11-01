@@ -22,6 +22,12 @@ public struct MediaLanguageOption: Hashable, Sendable {
         displayName = message.hasDisplayName ? message.displayName : nil
         characteristics = message.characteristics
     }
+
+    /// For diagnostics logs: no titles or personal data, only track metadata.
+    public var logDescription: String {
+        "type=\(type.map(String.init) ?? "-") tag=\(languageTag ?? "-") id=\(identifier ?? "-") name=\(displayName ?? "-")"
+            + (characteristics.isEmpty ? "" : " chars=\(characteristics.joined(separator: ","))")
+    }
 }
 
 public struct MediaLanguageOptionGroup: Hashable, Sendable {

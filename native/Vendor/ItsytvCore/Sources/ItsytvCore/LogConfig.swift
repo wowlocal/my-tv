@@ -24,6 +24,11 @@ struct CoreLog {
         logger.debug("\(message, privacy: .public)")
     }
 
+    /// Always logged (not gated by `verbose`); for rare, useful diagnostics.
+    func notice(_ message: String) {
+        logger.notice("\(message, privacy: .public)")
+    }
+
     func warning(_ message: String) {
         logger.warning("\(message, privacy: .public)")
     }

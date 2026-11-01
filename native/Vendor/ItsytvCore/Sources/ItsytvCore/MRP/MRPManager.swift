@@ -141,8 +141,12 @@ public final class MRPManager {
         message.type = .sendCommandMessage
         message.MRP_sendCommandMessage = sendCmd
 
-        log.info("MRP \(enabled ? "enable" : "disable") language option \(option.identifier ?? "?") type=\(option.type ?? 0) tag=\(option.languageTag ?? "?")")
-        tunnel?.send(message)
+        log.notice("MRP \(enabled ? "enable" : "disable") language option: \(option.logDescription)")
+        sendAndReceive(&message) { response in
+            guard let response else { log.notice("MRP language option command: no reply"); return }
+            let ext = response.unknownFields.data.prefix(96).map { String(format: "%02x", $0) }.joined()
+            log.notice("MRP language option reply: type=\(response.type) error=\(response.hasErrorCode ? String(response.errorCode) : "-") ext=\(ext)")
+        }
         for delay in [0.8, 2.5] {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.refreshNowPlaying() }
         }
@@ -541,10 +545,13 @@ public final class MRPManager {
             guard self.languageOptions != languages else { return }
             self.languageOptions = languages
             if let languages {
-                let groups = languages.available.map { group in
-                    "[empty=\(group.allowsEmptySelection) " + group.options.map { "\($0.type ?? 0):\($0.languageTag ?? "?")" }.joined(separator: ",") + "]"
+                let commands = "enable=\(self.supportedCommands.contains(.enableLanguageOption)) disable=\(self.supportedCommands.contains(.disableLanguageOption))"
+                log.notice("MRP language options (\(commands)):")
+                for (index, group) in languages.available.enumerated() {
+                    log.notice("  group \(index) allowsEmpty=\(group.allowsEmptySelection) default=\(group.defaultOption?.identifier ?? "-")")
+                    for option in group.options { log.notice("    \(option.logDescription)") }
                 }
-                log.info("MRP language options: \(groups.joined(separator: " ")) current=\(languages.current.map { $0.identifier ?? "?" })")
+                for option in languages.current { log.notice("  current \(option.logDescription)") }
             }
         }
 
