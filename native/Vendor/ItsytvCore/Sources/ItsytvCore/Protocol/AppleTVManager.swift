@@ -883,7 +883,9 @@ public final class AppleTVManager {
         }
         let info = RemoteNowPlayingInfo.decode(data)
         log.notice("Companion NowPlayingInfo: captionsEnabled=\(info?.captionsEnabled.map(String.init) ?? "-") hasValidCaptionOptions=\(info?.hasValidCaptionOptions.map(String.init) ?? "-")\(info == nil ? " (unreadable, \(data.count) bytes)" : "")")
-        guard let info else { return }
+        // Some updates carry no caption keys (seen while the TV app's player loads); keep the
+        // last known state instead of flickering back to unknown.
+        guard let info, info.captionsEnabled != nil else { return }
         DispatchQueue.main.async { if self.nowPlayingInfo != info { self.nowPlayingInfo = info } }
     }
 

@@ -55,13 +55,15 @@ final class PlaybackTests: XCTestCase {
     func testThePlayersOwnSubtitleStateWinsOverTheSystemSetting() {
         // Subtitles picked in the player: the system setting says off, the player shows them.
         let picked = AppleRemotePlayback.make(flags: Flag.play, nowPlaying: true, mrpSkipBackward: false, mrpSkipForward: false,
-                                              captionsEnabled: true, hasCaptionOptions: true, captionSetting: 3)
+                                              captionsEnabled: true, captionSetting: 3)
         XCTAssertTrue(picked.subtitlesOn)
         XCTAssertTrue(picked.canToggleSubtitles)
-        let none = AppleRemotePlayback.make(flags: Flag.play, nowPlaying: true, mrpSkipBackward: false, mrpSkipForward: false,
-                                            captionsEnabled: false, hasCaptionOptions: false, captionSetting: 2)
-        XCTAssertFalse(none.subtitlesOn)
-        XCTAssertFalse(none.canToggleSubtitles, "a player without subtitles dims the button")
+        // The TV app reported captionsEnabled=false with hasValidCaptionOptions=false for a show
+        // with subtitles; the button must stay usable.
+        let off = AppleRemotePlayback.make(flags: Flag.play, nowPlaying: true, mrpSkipBackward: false, mrpSkipForward: false,
+                                           captionsEnabled: false, captionSetting: 2)
+        XCTAssertFalse(off.subtitlesOn, "the player's state wins over the system setting")
+        XCTAssertTrue(off.canToggleSubtitles)
     }
 
     func testSubtitleRequestAsksForTheOppositeOfWhatIsShowing() {

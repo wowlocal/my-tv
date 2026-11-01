@@ -35,8 +35,7 @@ final class NativeAppleRemoteDriver: AppleRemoteDriving {
             mrpSkipBackward: commands.contains(.skipBackward) || canSeek,
             mrpSkipForward: commands.contains(.skipForward) || canSeek,
             skipBackwardInterval: interval(.skipBackward), skipForwardInterval: interval(.skipForward),
-            captionsEnabled: manager.nowPlayingInfo?.captionsEnabled, hasCaptionOptions: manager.nowPlayingInfo?.hasValidCaptionOptions,
-            captionSetting: manager.captionSetting)
+            captionsEnabled: manager.nowPlayingInfo?.captionsEnabled, captionSetting: manager.captionSetting)
     }
 
     private func interval(_ command: MediaCommand) -> Double {

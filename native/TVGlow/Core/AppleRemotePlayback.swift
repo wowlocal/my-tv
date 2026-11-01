@@ -33,12 +33,12 @@ struct AppleRemotePlayback: Equatable {
     /// Builds the row's state. `flags` are Companion's media-control flags, which follow the
     /// player on screen the way the Remote app does: they clear when you leave the player for
     /// the shows grid. Until Apple TV has sent any (nil), MRP's now-playing state stands in.
-    /// Subtitles come from the player (`captionsEnabled`, `hasCaptionOptions`, Companion
-    /// NowPlayingInfo) when Apple TV reports them, else from the system `captionSetting`.
+    /// Subtitles come from the player (`captionsEnabled`, Companion NowPlayingInfo) when Apple TV
+    /// reports them, else from the system `captionSetting`. NowPlayingInfo's
+    /// `hasValidCaptionOptions` isn't used: the TV app reports false even for shows with subtitles.
     static func make(flags: UInt64?, nowPlaying: Bool, mrpSkipBackward: Bool, mrpSkipForward: Bool,
                      skipBackwardInterval: Double = 10, skipForwardInterval: Double = 10,
-                     captionsEnabled: Bool? = nil, hasCaptionOptions: Bool? = nil,
-                     captionSetting: Int?) -> AppleRemotePlayback {
+                     captionsEnabled: Bool? = nil, captionSetting: Int?) -> AppleRemotePlayback {
         var playback = AppleRemotePlayback()
         if let flags {
             playback.active = flags & (Flag.play | Flag.pause | Flag.skipForward | Flag.skipBackward) != 0
@@ -52,7 +52,7 @@ struct AppleRemotePlayback: Equatable {
         playback.skipBackwardInterval = skipBackwardInterval
         playback.skipForwardInterval = skipForwardInterval
         if let captionsEnabled {
-            playback.canToggleSubtitles = playback.active && hasCaptionOptions != false
+            playback.canToggleSubtitles = playback.active
             playback.subtitlesOn = captionsEnabled
         } else {
             playback.canToggleSubtitles = playback.active && captionSetting != nil
