@@ -18,6 +18,10 @@ def config_list(name,settings):
    if name in ['macOS','iOS']:
     specific['PRODUCT_BUNDLE_IDENTIFIER']=settings['PRODUCT_BUNDLE_IDENTIFIER']+'.debug'
     specific['APP_DISPLAY_NAME']='TV Glow Dev'
+   if name=='Controls':
+    # An extension's ID must extend its app's ID, which gains '.debug' in Debug.
+    specific['PRODUCT_BUNDLE_IDENTIFIER']='com.anna.tvglow.ios.debug.controls'
+    specific['APP_DISPLAY_NAME']='TV Glow Dev'
   if mode=='Release' and name=='macOS':specific['CODE_SIGN_INJECT_BASE_ENTITLEMENTS']='NO'
   configs.append(add(name+mode,'XCBuildConfiguration',name=mode,buildSettings=specific))
  return add(name+'configs','XCConfigurationList',buildConfigurations=configs,defaultConfigurationIsVisible=0,defaultConfigurationName='Release')
@@ -30,6 +34,13 @@ for filename,kind in [('WebOSManifest.json','text.json'),('WebOS-LICENSE.txt','t
 appgroup=add('appgroup','PBXGroup',path='TVGlow',sourceTree='<group>',children=list(refs.values())+[assets]+resources)
 testrefs=[add('testfile'+p.name,'PBXFileReference',lastKnownFileType='sourcecode.swift',path=p.name,sourceTree='<group>') for p in sorted((ROOT/'TVGlowTests').glob('*.swift'))]
 testgroup=add('testgroup','PBXGroup',path='TVGlowTests',sourceTree='<group>',children=testrefs)
+# iOS Control Center control (WidgetKit extension). It shares OpenRemoteIntent with the app,
+# which runs the intent when the control is tapped.
+controlswifts=sorted((ROOT/'TVGlowControls').glob('*.swift'))
+controlrefs=[add('controlfile'+p.name,'PBXFileReference',lastKnownFileType='sourcecode.swift',path=p.name,sourceTree='<group>') for p in controlswifts]
+controlplist=add('controlplist','PBXFileReference',lastKnownFileType='text.plist.xml',path='Info.plist',sourceTree='<group>')
+controlsgroup=add('controlsgroup','PBXGroup',path='TVGlowControls',sourceTree='<group>',children=controlrefs+[controlplist])
+controls_target=uid('Controlstarget');controls_product=uid('Controlsproduct')
 products=[];targets=[]
 atv_package=add('atv-package','XCLocalSwiftPackageReference',relativePath='Vendor/ItsytvCore')
 base={'SWIFT_VERSION':'5.0','MACOSX_DEPLOYMENT_TARGET':'14.0','IPHONEOS_DEPLOYMENT_TARGET':'17.0','CLANG_ENABLE_MODULES':'YES','CLANG_ENABLE_OBJC_ARC':'YES','ENABLE_TESTABILITY':'YES','GENERATE_INFOPLIST_FILE':'NO','INFOPLIST_FILE':'TVGlow/Config/Info.plist','CURRENT_PROJECT_VERSION':'1','MARKETING_VERSION':'1.0','PRODUCT_NAME':'TV Glow','APP_DISPLAY_NAME':'TV Glow','PRODUCT_MODULE_NAME':'TVGlow','ASSETCATALOG_COMPILER_APPICON_NAME':'AppIcon','CODE_SIGN_STYLE':'Automatic','SWIFT_EMIT_LOC_STRINGS':'YES','LD_RUNPATH_SEARCH_PATHS':['$(inherited)','@executable_path/../Frameworks','@executable_path/Frameworks']}
@@ -41,19 +52,35 @@ for platform in ['macOS','iOS','Tests']:
  sourcephase=add(platform+'sources','PBXSourcesBuildPhase',buildActionMask=2147483647,files=builds,runOnlyForDeploymentPostprocessing=0)
  resbuilds=[] if is_test else [add(platform+'res'+ref,'PBXBuildFile',fileRef=ref) for ref in [assets]+resources]
  resourcephase=add(platform+'resources','PBXResourcesBuildPhase',buildActionMask=2147483647,files=resbuilds,runOnlyForDeploymentPostprocessing=0)
+ phases=[sourcephase,None,resourcephase];dependencies=[]
+ if platform=='iOS':
+  embed=add('iOSembed-controls','PBXBuildFile',fileRef=controls_product,settings={'ATTRIBUTES':['RemoveHeadersOnCopy']})
+  phases.append(add('iOSembed','PBXCopyFilesBuildPhase',buildActionMask=2147483647,dstPath='',dstSubfolderSpec=13,files=[embed],name='Embed Foundation Extensions',runOnlyForDeploymentPostprocessing=0))
+  proxy=add('iOScontrols-proxy','PBXContainerItemProxy',containerPortal=uid('project'),proxyType=1,remoteGlobalIDString=controls_target,remoteInfo='TV Glow Controls')
+  dependencies.append(add('iOScontrols-dependency','PBXTargetDependency',target=controls_target,targetProxy=proxy))
  atv_product=add(platform+'atv-product','XCSwiftPackageProductDependency',package=atv_package,productName='ItsytvCore')
  atv_build=add(platform+'atv-build','PBXBuildFile',productRef=atv_product)
  frameworkphase=add(platform+'frameworks','PBXFrameworksBuildPhase',buildActionMask=2147483647,files=[atv_build],runOnlyForDeploymentPostprocessing=0)
+ phases[1]=frameworkphase
  settings={**base,'SDKROOT':'macosx' if is_mac else 'iphoneos','SUPPORTED_PLATFORMS':'macosx' if is_mac else 'iphoneos iphonesimulator','PRODUCT_BUNDLE_IDENTIFIER':'com.anna.tvglow.'+('tests' if is_test else 'mac' if is_mac else 'ios')}
  if is_mac:settings.update({'CODE_SIGN_IDENTITY':'-','CODE_SIGN_ENTITLEMENTS':'TVGlow/Config/Mac.entitlements','ENABLE_HARDENED_RUNTIME':'YES'})
  else:settings.update({'TARGETED_DEVICE_FAMILY':'1,2','SUPPORTS_MACCATALYST':'NO'})
  if is_test:
   settings.update({'PRODUCT_NAME':'TVGlowTests','PRODUCT_MODULE_NAME':'TVGlowTests','GENERATE_INFOPLIST_FILE':'YES','CODE_SIGN_ENTITLEMENTS':''})
   settings.pop('INFOPLIST_FILE');settings.pop('ASSETCATALOG_COMPILER_APPICON_NAME')
- target=add(platform+'target','PBXNativeTarget',name=name,productName=settings['PRODUCT_NAME'],productReference=product,productType='com.apple.product-type.bundle.unit-test' if is_test else 'com.apple.product-type.application',buildConfigurationList=config_list(platform,settings),buildPhases=[sourcephase,frameworkphase,resourcephase],buildRules=[],dependencies=[],packageProductDependencies=[atv_product])
+ target=add(platform+'target','PBXNativeTarget',name=name,productName=settings['PRODUCT_NAME'],productReference=product,productType='com.apple.product-type.bundle.unit-test' if is_test else 'com.apple.product-type.application',buildConfigurationList=config_list(platform,settings),buildPhases=phases,buildRules=[],dependencies=dependencies,packageProductDependencies=[atv_product])
  targets.append(target)
+products.append(add('Controlsproduct','PBXFileReference',explicitFileType='wrapper.app-extension',includeInIndex=0,path='TVGlowControls.appex',sourceTree='BUILT_PRODUCTS_DIR'))
+intent=refs[ROOT/'TVGlow/App/OpenRemoteIntent.swift']
+controlbuilds=[add('Controls'+ref,'PBXBuildFile',fileRef=ref) for ref in controlrefs+[intent]]
+controls_settings={**base,'SDKROOT':'iphoneos','SUPPORTED_PLATFORMS':'iphoneos iphonesimulator','TARGETED_DEVICE_FAMILY':'1,2','IPHONEOS_DEPLOYMENT_TARGET':'18.0','PRODUCT_NAME':'TVGlowControls','PRODUCT_MODULE_NAME':'TVGlowControls','PRODUCT_BUNDLE_IDENTIFIER':'com.anna.tvglow.ios.controls','INFOPLIST_FILE':'TVGlowControls/Info.plist','SKIP_INSTALL':'YES','APPLICATION_EXTENSION_API_ONLY':'YES','LD_RUNPATH_SEARCH_PATHS':['$(inherited)','@executable_path/Frameworks','@executable_path/../../Frameworks']}
+controls_settings.pop('ASSETCATALOG_COMPILER_APPICON_NAME')
+controls_phases=[add('Controlssources','PBXSourcesBuildPhase',buildActionMask=2147483647,files=controlbuilds,runOnlyForDeploymentPostprocessing=0),
+ add('Controlsframeworks','PBXFrameworksBuildPhase',buildActionMask=2147483647,files=[],runOnlyForDeploymentPostprocessing=0),
+ add('Controlsresources','PBXResourcesBuildPhase',buildActionMask=2147483647,files=[],runOnlyForDeploymentPostprocessing=0)]
+targets.append(add('Controlstarget','PBXNativeTarget',name='TV Glow Controls',productName='TVGlowControls',productReference=controls_product,productType='com.apple.product-type.app-extension',buildConfigurationList=config_list('Controls',controls_settings),buildPhases=controls_phases,buildRules=[],dependencies=[]))
 productgroup=add('productgroup','PBXGroup',name='Products',sourceTree='<group>',children=products)
-main=add('main','PBXGroup',sourceTree='<group>',children=[appgroup,testgroup,productgroup])
+main=add('main','PBXGroup',sourceTree='<group>',children=[appgroup,controlsgroup,testgroup,productgroup])
 project=add('project','PBXProject',attributes={'BuildIndependentTargetsInParallel':'YES','LastUpgradeCheck':'2630'},buildConfigurationList=config_list('project',{'ALWAYS_SEARCH_USER_PATHS':'NO','CLANG_WARN_DOCUMENTATION_COMMENTS':'YES','GCC_C_LANGUAGE_STANDARD':'gnu17','SWIFT_VERSION':'5.0'}),compatibilityVersion='Xcode 14.0',developmentRegion='en',hasScannedForEncodings=0,knownRegions=['en','Base'],mainGroup=main,productRefGroup=productgroup,projectDirPath='',projectRoot='',targets=targets,packageReferences=[atv_package])
 def fmt(value,indent=0):
  if isinstance(value,dict):return '{\n'+''.join('\t'*(indent+1)+json.dumps(str(k))+' = '+fmt(v,indent+1)+';\n' for k,v in value.items())+'\t'*indent+'}'
@@ -80,6 +107,7 @@ info={'CFBundleDevelopmentRegion':'en','CFBundleDisplayName':'$(APP_DISPLAY_NAME
 info['NSLocalNetworkUsageDescription']='TV Glow connects to your LG TV, Apple TV and Sonos soundbar for remote control, brightness and volume.'
 info['NSBonjourServices']=['_companion-link._tcp','_airplay._tcp','_mediaremotetv._tcp']
 (ROOT/'TVGlow/Config/Info.plist').write_bytes(plistlib.dumps(info))
+(ROOT/'TVGlowControls/Info.plist').write_bytes(plistlib.dumps({**{k:info[k] for k in ['CFBundleDevelopmentRegion','CFBundleDisplayName','CFBundleExecutable','CFBundleIdentifier','CFBundleInfoDictionaryVersion','CFBundleName','CFBundleShortVersionString','CFBundleVersion']},'CFBundlePackageType':'XPC!','NSExtension':{'NSExtensionPointIdentifier':'com.apple.widgetkit-extension'}}))
 (ROOT/'TVGlow/Config/Mac.entitlements').write_bytes(plistlib.dumps({'com.apple.security.app-sandbox':True,'com.apple.security.network.client':True}))
 # Shared simple vector-style sun mark, rasterized locally at each required size.
 assetsdir=ROOT/'TVGlow/Resources/Assets.xcassets';assetsdir.mkdir(exist_ok=True)
@@ -98,4 +126,4 @@ for points in [16,32,128,256,512]:
   entries.append({'filename':filename,'idiom':'mac','scale':f'{scale}x','size':f'{points}x{points}'})
 im.save(iconset/'ios-1024.png');entries.append({'filename':'ios-1024.png','idiom':'universal','platform':'ios','size':'1024x1024'})
 (iconset/'Contents.json').write_text(json.dumps({'images':entries,'info':{'author':'xcode','version':1}},indent=2))
-print('Generated TVGlow.xcodeproj (macOS, iOS, macOS tests) and icons.')
+print('Generated TVGlow.xcodeproj (macOS, iOS, iOS controls, macOS tests) and icons.')

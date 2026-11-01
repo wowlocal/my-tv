@@ -51,6 +51,11 @@ struct ContentView: View {
         .onChange(of: remote.connected) { _, connected in
             if connected { showingDevices = false } else { showingKeyboard = false }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .showRemote)) { _ in
+            // Opened from Control Center: show the touch surface, not settings left open earlier.
+            // Pairing (the device popover) and Apple TV's keyboard stay where they are.
+            showingConnections = false
+        }
     }
 
     // MARK: Top bar

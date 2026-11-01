@@ -5,6 +5,12 @@
 	};
 	"objectVersion" = 56;
 	"objects" = {
+		"E7283409111AA78C43CD2C43" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "App/OpenRemoteIntent.swift";
+			"sourceTree" = "<group>";
+		};
 		"090F4A4998B0767A434E5468" = {
 			"isa" = "PBXFileReference";
 			"lastKnownFileType" = "sourcecode.swift";
@@ -118,6 +124,7 @@
 			"path" = "TVGlow";
 			"sourceTree" = "<group>";
 			"children" = (
+				"E7283409111AA78C43CD2C43",
 				"090F4A4998B0767A434E5468",
 				"09488E53BC0968D042716E72",
 				"059AA59543761B5D3554A4F6",
@@ -166,6 +173,27 @@
 				"4918860C690A3CD2CC0A0E23",
 			);
 		};
+		"B40B6DEF68031230A3B3CCA5" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "RemoteControl.swift";
+			"sourceTree" = "<group>";
+		};
+		"D3F99C3CA15D0416871BC171" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "text.plist.xml";
+			"path" = "Info.plist";
+			"sourceTree" = "<group>";
+		};
+		"F1111A84F10238C8B2B62F28" = {
+			"isa" = "PBXGroup";
+			"path" = "TVGlowControls";
+			"sourceTree" = "<group>";
+			"children" = (
+				"B40B6DEF68031230A3B3CCA5",
+				"D3F99C3CA15D0416871BC171",
+			);
+		};
 		"5538BD9B917FC22F2D66D938" = {
 			"isa" = "XCLocalSwiftPackageReference";
 			"relativePath" = "Vendor/ItsytvCore";
@@ -176,6 +204,10 @@
 			"includeInIndex" = 0;
 			"path" = "TV Glow.app";
 			"sourceTree" = "BUILT_PRODUCTS_DIR";
+		};
+		"C9C75DE1C50AA18E4860798D" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "E7283409111AA78C43CD2C43";
 		};
 		"A5130A18D643F7D01460AB4E" = {
 			"isa" = "PBXBuildFile";
@@ -241,6 +273,7 @@
 			"isa" = "PBXSourcesBuildPhase";
 			"buildActionMask" = 2147483647;
 			"files" = (
+				"C9C75DE1C50AA18E4860798D",
 				"A5130A18D643F7D01460AB4E",
 				"AD6D191252BF8C4689078986",
 				"960A5902C5C1BAD18B01CCFD",
@@ -407,6 +440,10 @@
 			"path" = "TV Glow.app";
 			"sourceTree" = "BUILT_PRODUCTS_DIR";
 		};
+		"5D25A16079CF17840CC32646" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "E7283409111AA78C43CD2C43";
+		};
 		"46929218ED671F47E58D776F" = {
 			"isa" = "PBXBuildFile";
 			"fileRef" = "090F4A4998B0767A434E5468";
@@ -471,6 +508,7 @@
 			"isa" = "PBXSourcesBuildPhase";
 			"buildActionMask" = 2147483647;
 			"files" = (
+				"5D25A16079CF17840CC32646",
 				"46929218ED671F47E58D776F",
 				"DEC588DAD2F634A5F88AA5D1",
 				"49C4BB09FD4D6A357685B7D6",
@@ -510,6 +548,38 @@
 				"50C331FF7E1A2B5084FE53FD",
 			);
 			"runOnlyForDeploymentPostprocessing" = 0;
+		};
+		"3667065BE6C99C0C68D062C2" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "CA3141DCA58830030FDCB922";
+			"settings" = {
+				"ATTRIBUTES" = (
+					"RemoveHeadersOnCopy",
+				);
+			};
+		};
+		"1D70B6BEDA126F729D3DD4EB" = {
+			"isa" = "PBXCopyFilesBuildPhase";
+			"buildActionMask" = 2147483647;
+			"dstPath" = "";
+			"dstSubfolderSpec" = 13;
+			"files" = (
+				"3667065BE6C99C0C68D062C2",
+			);
+			"name" = "Embed Foundation Extensions";
+			"runOnlyForDeploymentPostprocessing" = 0;
+		};
+		"CD432129A4C6CB63A67FFE08" = {
+			"isa" = "PBXContainerItemProxy";
+			"containerPortal" = "98F54143AB4E86B28C3AFEE0";
+			"proxyType" = 1;
+			"remoteGlobalIDString" = "FEDB4CAFF9A3F567E99BF9D9";
+			"remoteInfo" = "TV Glow Controls";
+		};
+		"E5C406046F8ADD7EDCBA4DC0" = {
+			"isa" = "PBXTargetDependency";
+			"target" = "FEDB4CAFF9A3F567E99BF9D9";
+			"targetProxy" = "CD432129A4C6CB63A67FFE08";
 		};
 		"34753F34A491B3EC98E6D062" = {
 			"isa" = "XCSwiftPackageProductDependency";
@@ -618,10 +688,12 @@
 				"9C28F5FF27EF4CDBE4A4B070",
 				"07062973FBC66B46BDB40765",
 				"088AE5F8F41D5C28D4275F2E",
+				"1D70B6BEDA126F729D3DD4EB",
 			);
 			"buildRules" = (
 			);
 			"dependencies" = (
+				"E5C406046F8ADD7EDCBA4DC0",
 			);
 			"packageProductDependencies" = (
 				"34753F34A491B3EC98E6D062",
@@ -817,6 +889,140 @@
 				"A40A9FEF82F02481128B7667",
 			);
 		};
+		"CA3141DCA58830030FDCB922" = {
+			"isa" = "PBXFileReference";
+			"explicitFileType" = "wrapper.app-extension";
+			"includeInIndex" = 0;
+			"path" = "TVGlowControls.appex";
+			"sourceTree" = "BUILT_PRODUCTS_DIR";
+		};
+		"6F9F2E61A09A3E1485E4B76C" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "B40B6DEF68031230A3B3CCA5";
+		};
+		"6462E384EA49E19778EDCB08" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "E7283409111AA78C43CD2C43";
+		};
+		"55B4B849D8D2A43188927F41" = {
+			"isa" = "PBXSourcesBuildPhase";
+			"buildActionMask" = 2147483647;
+			"files" = (
+				"6F9F2E61A09A3E1485E4B76C",
+				"6462E384EA49E19778EDCB08",
+			);
+			"runOnlyForDeploymentPostprocessing" = 0;
+		};
+		"6C70AD713128002D6AF8D02A" = {
+			"isa" = "PBXFrameworksBuildPhase";
+			"buildActionMask" = 2147483647;
+			"files" = (
+			);
+			"runOnlyForDeploymentPostprocessing" = 0;
+		};
+		"3141810EABE20B9063A731AF" = {
+			"isa" = "PBXResourcesBuildPhase";
+			"buildActionMask" = 2147483647;
+			"files" = (
+			);
+			"runOnlyForDeploymentPostprocessing" = 0;
+		};
+		"FA7F02813B079BD561F9E583" = {
+			"isa" = "XCBuildConfiguration";
+			"name" = "Debug";
+			"buildSettings" = {
+				"SWIFT_VERSION" = "5.0";
+				"MACOSX_DEPLOYMENT_TARGET" = "14.0";
+				"IPHONEOS_DEPLOYMENT_TARGET" = "18.0";
+				"CLANG_ENABLE_MODULES" = "YES";
+				"CLANG_ENABLE_OBJC_ARC" = "YES";
+				"ENABLE_TESTABILITY" = "YES";
+				"GENERATE_INFOPLIST_FILE" = "NO";
+				"INFOPLIST_FILE" = "TVGlowControls/Info.plist";
+				"CURRENT_PROJECT_VERSION" = "1";
+				"MARKETING_VERSION" = "1.0";
+				"PRODUCT_NAME" = "TVGlowControls";
+				"APP_DISPLAY_NAME" = "TV Glow Dev";
+				"PRODUCT_MODULE_NAME" = "TVGlowControls";
+				"CODE_SIGN_STYLE" = "Automatic";
+				"SWIFT_EMIT_LOC_STRINGS" = "YES";
+				"LD_RUNPATH_SEARCH_PATHS" = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				"SDKROOT" = "iphoneos";
+				"SUPPORTED_PLATFORMS" = "iphoneos iphonesimulator";
+				"TARGETED_DEVICE_FAMILY" = "1,2";
+				"PRODUCT_BUNDLE_IDENTIFIER" = "com.anna.tvglow.ios.debug.controls";
+				"SKIP_INSTALL" = "YES";
+				"APPLICATION_EXTENSION_API_ONLY" = "YES";
+				"SWIFT_OPTIMIZATION_LEVEL" = "-Onone";
+				"DEBUG_INFORMATION_FORMAT" = "dwarf";
+				"SWIFT_ACTIVE_COMPILATION_CONDITIONS" = "DEBUG";
+				"ONLY_ACTIVE_ARCH" = "YES";
+			};
+		};
+		"D1861F1420C63A584612E344" = {
+			"isa" = "XCBuildConfiguration";
+			"name" = "Release";
+			"buildSettings" = {
+				"SWIFT_VERSION" = "5.0";
+				"MACOSX_DEPLOYMENT_TARGET" = "14.0";
+				"IPHONEOS_DEPLOYMENT_TARGET" = "18.0";
+				"CLANG_ENABLE_MODULES" = "YES";
+				"CLANG_ENABLE_OBJC_ARC" = "YES";
+				"ENABLE_TESTABILITY" = "YES";
+				"GENERATE_INFOPLIST_FILE" = "NO";
+				"INFOPLIST_FILE" = "TVGlowControls/Info.plist";
+				"CURRENT_PROJECT_VERSION" = "1";
+				"MARKETING_VERSION" = "1.0";
+				"PRODUCT_NAME" = "TVGlowControls";
+				"APP_DISPLAY_NAME" = "TV Glow";
+				"PRODUCT_MODULE_NAME" = "TVGlowControls";
+				"CODE_SIGN_STYLE" = "Automatic";
+				"SWIFT_EMIT_LOC_STRINGS" = "YES";
+				"LD_RUNPATH_SEARCH_PATHS" = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				"SDKROOT" = "iphoneos";
+				"SUPPORTED_PLATFORMS" = "iphoneos iphonesimulator";
+				"TARGETED_DEVICE_FAMILY" = "1,2";
+				"PRODUCT_BUNDLE_IDENTIFIER" = "com.anna.tvglow.ios.controls";
+				"SKIP_INSTALL" = "YES";
+				"APPLICATION_EXTENSION_API_ONLY" = "YES";
+				"SWIFT_OPTIMIZATION_LEVEL" = "-O";
+				"DEBUG_INFORMATION_FORMAT" = "dwarf-with-dsym";
+			};
+		};
+		"064D4DFD6C086755DA758457" = {
+			"isa" = "XCConfigurationList";
+			"buildConfigurations" = (
+				"FA7F02813B079BD561F9E583",
+				"D1861F1420C63A584612E344",
+			);
+			"defaultConfigurationIsVisible" = 0;
+			"defaultConfigurationName" = "Release";
+		};
+		"FEDB4CAFF9A3F567E99BF9D9" = {
+			"isa" = "PBXNativeTarget";
+			"name" = "TV Glow Controls";
+			"productName" = "TVGlowControls";
+			"productReference" = "CA3141DCA58830030FDCB922";
+			"productType" = "com.apple.product-type.app-extension";
+			"buildConfigurationList" = "064D4DFD6C086755DA758457";
+			"buildPhases" = (
+				"55B4B849D8D2A43188927F41",
+				"6C70AD713128002D6AF8D02A",
+				"3141810EABE20B9063A731AF",
+			);
+			"buildRules" = (
+			);
+			"dependencies" = (
+			);
+		};
 		"1EE63A94BAD0DF0FCB0E7B8C" = {
 			"isa" = "PBXGroup";
 			"name" = "Products";
@@ -825,6 +1031,7 @@
 				"EE44EC02CC9792D5EDBBA009",
 				"679D800FB0F7C78048DDEF4D",
 				"FDF98803FFAAFF1147692F15",
+				"CA3141DCA58830030FDCB922",
 			);
 		};
 		"B28B7AF69320201D1CF206EB" = {
@@ -832,6 +1039,7 @@
 			"sourceTree" = "<group>";
 			"children" = (
 				"3A2A88DEEFF3D1D23E496597",
+				"F1111A84F10238C8B2B62F28",
 				"8B7A6DECC0651D269EA794C7",
 				"1EE63A94BAD0DF0FCB0E7B8C",
 			);
@@ -893,6 +1101,7 @@
 				"05380E88487458D548BA9E0A",
 				"3E762B1378C1284ADEBE95C0",
 				"DB232FBED708F45A1A18553B",
+				"FEDB4CAFF9A3F567E99BF9D9",
 			);
 			"packageReferences" = (
 				"5538BD9B917FC22F2D66D938",
