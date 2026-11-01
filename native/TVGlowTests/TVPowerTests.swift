@@ -146,4 +146,11 @@ final class TVPowerTests: XCTestCase {
         XCTAssertTrue(store.tvError)
         XCTAssertFalse(store.tvPowerBusy)
     }
+
+    func testPowerPressWaitsUntilTVGlowKnowsWhetherTheTVIsOn() {
+        XCTAssertTrue(PowerToggle.isReady(tvConnecting: false, tvConnected: true, appleTVConnected: false), "a TV that answers is on: turn it off")
+        XCTAssertTrue(PowerToggle.isReady(tvConnecting: false, tvConnected: false, appleTVConnected: true), "TV silent, Apple TV ready to wake it")
+        XCTAssertFalse(PowerToggle.isReady(tvConnecting: true, tvConnected: false, appleTVConnected: true), "still finding out whether the TV is on")
+        XCTAssertFalse(PowerToggle.isReady(tvConnecting: false, tvConnected: false, appleTVConnected: false), "no way to turn it on yet")
+    }
 }

@@ -52,7 +52,11 @@ struct ContentView: View {
         .sheet(isPresented: $showingKeyboard) {
             AppleTVKeyboardView(remote: remote).padding(22).presentationDetents([.height(190)])
         }
-        .task { store.start(); remote.start() }
+        .task {
+            store.start(); remote.start()
+            // A TV Power press that launched the app arrives before this screen exists.
+            if PendingRemoteActions.takePowerToggle() { await togglePowerWhenReady() }
+        }
         .onChange(of: scenePhase) { _, phase in
             // Back in the foreground: re-check devices and reconnect without any taps.
             if phase == .active { store.resume(); remote.resume() }
@@ -63,6 +67,10 @@ struct ContentView: View {
         }
         .onChange(of: remote.connected) { _, connected in
             if connected { showingDevices = false } else { showingKeyboard = false }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .togglePower)) { _ in
+            guard PendingRemoteActions.takePowerToggle() else { return }
+            Task { await togglePowerWhenReady() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .showRemote)) { _ in
             // Opened from Control Center: show the touch surface, not settings left open earlier.
@@ -145,6 +153,19 @@ struct ContentView: View {
     private func togglePower() {
         feedback += 1
         store.tvConnected ? powerOff() : powerOn()
+    }
+
+    /// Acts on a TV Power press from the Action button or Control Center. Right after launch it
+    /// first waits (up to a few seconds) to learn whether the TV is on; see `PowerToggle`.
+    private func togglePowerWhenReady() async {
+        let deadline = Date().addingTimeInterval(PowerToggle.timeout)
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        while Date() < deadline,
+              !PowerToggle.isReady(tvConnecting: store.tvConnecting, tvConnected: store.tvConnected, appleTVConnected: remote.connected) {
+            try? await Task.sleep(nanoseconds: 200_000_000)
+        }
+        guard !store.tvPowerBusy else { return }
+        togglePower()
     }
 
     private func powerOn() {

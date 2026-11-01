@@ -17,6 +17,12 @@
 			"path" = "App/TVGlowApp.swift";
 			"sourceTree" = "<group>";
 		};
+		"8C6B29C6EF25DD0478BB1553" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "App/TogglePowerIntent.swift";
+			"sourceTree" = "<group>";
+		};
 		"3C506FD09D7AAA26C0F8EB4F" = {
 			"isa" = "PBXFileReference";
 			"lastKnownFileType" = "sourcecode.swift";
@@ -51,6 +57,12 @@
 			"isa" = "PBXFileReference";
 			"lastKnownFileType" = "sourcecode.swift";
 			"path" = "Core/PairingStore.swift";
+			"sourceTree" = "<group>";
+		};
+		"214176664158687853C5839E" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "Core/PowerToggle.swift";
 			"sourceTree" = "<group>";
 		};
 		"98D780D3C590CCEDBB899411" = {
@@ -144,12 +156,14 @@
 			"children" = (
 				"E7283409111AA78C43CD2C43",
 				"090F4A4998B0767A434E5468",
+				"8C6B29C6EF25DD0478BB1553",
 				"3C506FD09D7AAA26C0F8EB4F",
 				"09488E53BC0968D042716E72",
 				"059AA59543761B5D3554A4F6",
 				"447EB0FBA7D179F77596763F",
 				"C2F25B48DBF13E064086B48A",
 				"82C68ACC7717A5C0781D7C34",
+				"214176664158687853C5839E",
 				"98D780D3C590CCEDBB899411",
 				"2D262640D97CD5113319883E",
 				"A2E9E7A11A105E9D831CFF6B",
@@ -241,6 +255,10 @@
 			"isa" = "PBXBuildFile";
 			"fileRef" = "090F4A4998B0767A434E5468";
 		};
+		"68B2612C61508701FB988ADA" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "8C6B29C6EF25DD0478BB1553";
+		};
 		"679C4BB635FC0E20154BAF93" = {
 			"isa" = "PBXBuildFile";
 			"fileRef" = "3C506FD09D7AAA26C0F8EB4F";
@@ -264,6 +282,10 @@
 		"9FD87FB1C0916F602322FF2D" = {
 			"isa" = "PBXBuildFile";
 			"fileRef" = "82C68ACC7717A5C0781D7C34";
+		};
+		"31606CB744F1935865792194" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "214176664158687853C5839E";
 		};
 		"24CD1597C0C2F137AD811A00" = {
 			"isa" = "PBXBuildFile";
@@ -315,12 +337,14 @@
 			"files" = (
 				"C9C75DE1C50AA18E4860798D",
 				"A5130A18D643F7D01460AB4E",
+				"68B2612C61508701FB988ADA",
 				"679C4BB635FC0E20154BAF93",
 				"AD6D191252BF8C4689078986",
 				"960A5902C5C1BAD18B01CCFD",
 				"008281EAA3859846295A086D",
 				"1E96B3A55FCDE168D25909B3",
 				"9FD87FB1C0916F602322FF2D",
+				"31606CB744F1935865792194",
 				"24CD1597C0C2F137AD811A00",
 				"08B9692C1C65C06808EFEDF4",
 				"243AB47411A35867DFFC6EF9",
@@ -491,6 +515,10 @@
 			"isa" = "PBXBuildFile";
 			"fileRef" = "090F4A4998B0767A434E5468";
 		};
+		"1BDFAED123F58F5F1EC3C7C0" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "8C6B29C6EF25DD0478BB1553";
+		};
 		"C469E1087B49557B77E2DCD1" = {
 			"isa" = "PBXBuildFile";
 			"fileRef" = "3C506FD09D7AAA26C0F8EB4F";
@@ -514,6 +542,10 @@
 		"7061BDDA4108E23B8EA60702" = {
 			"isa" = "PBXBuildFile";
 			"fileRef" = "82C68ACC7717A5C0781D7C34";
+		};
+		"2465414CFDBD4BD11194CD36" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "214176664158687853C5839E";
 		};
 		"14F1D030CDF3D93776C1B157" = {
 			"isa" = "PBXBuildFile";
@@ -565,12 +597,14 @@
 			"files" = (
 				"5D25A16079CF17840CC32646",
 				"46929218ED671F47E58D776F",
+				"1BDFAED123F58F5F1EC3C7C0",
 				"C469E1087B49557B77E2DCD1",
 				"DEC588DAD2F634A5F88AA5D1",
 				"49C4BB09FD4D6A357685B7D6",
 				"B10766B03199356876C72B72",
 				"5DA7B5FA529501B21DC70451",
 				"7061BDDA4108E23B8EA60702",
+				"2465414CFDBD4BD11194CD36",
 				"14F1D030CDF3D93776C1B157",
 				"D73490B2AB89249B8E3B9C7E",
 				"295B4AF8F8527F9CDC7ED010",
@@ -788,6 +822,10 @@
 			"isa" = "PBXBuildFile";
 			"fileRef" = "82C68ACC7717A5C0781D7C34";
 		};
+		"11DD89DFC5793631519CAD0B" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "214176664158687853C5839E";
+		};
 		"4415C93AE08A1070C88C2900" = {
 			"isa" = "PBXBuildFile";
 			"fileRef" = "98D780D3C590CCEDBB899411";
@@ -830,6 +868,7 @@
 				"F9A6810DFAEB91B8F7726AC5",
 				"F1CAFD56AA6B151F6C1971A5",
 				"84BDEFA8507C0F0C50962105",
+				"11DD89DFC5793631519CAD0B",
 				"4415C93AE08A1070C88C2900",
 				"2D63F02CC4C51472954A320F",
 				"ABB871D64E8B1EE47C3E3ABC",
@@ -977,12 +1016,17 @@
 			"isa" = "PBXBuildFile";
 			"fileRef" = "E7283409111AA78C43CD2C43";
 		};
+		"8D4871BFD2CC354406559E1E" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "8C6B29C6EF25DD0478BB1553";
+		};
 		"55B4B849D8D2A43188927F41" = {
 			"isa" = "PBXSourcesBuildPhase";
 			"buildActionMask" = 2147483647;
 			"files" = (
 				"6F9F2E61A09A3E1485E4B76C",
 				"6462E384EA49E19778EDCB08",
+				"8D4871BFD2CC354406559E1E",
 			);
 			"runOnlyForDeploymentPostprocessing" = 0;
 		};

@@ -71,8 +71,9 @@ for platform in ['macOS','iOS','Tests']:
  target=add(platform+'target','PBXNativeTarget',name=name,productName=settings['PRODUCT_NAME'],productReference=product,productType='com.apple.product-type.bundle.unit-test' if is_test else 'com.apple.product-type.application',buildConfigurationList=config_list(platform,settings),buildPhases=phases,buildRules=[],dependencies=dependencies,packageProductDependencies=[atv_product])
  targets.append(target)
 products.append(add('Controlsproduct','PBXFileReference',explicitFileType='wrapper.app-extension',includeInIndex=0,path='TVGlowControls.appex',sourceTree='BUILT_PRODUCTS_DIR'))
-intent=refs[ROOT/'TVGlow/App/OpenRemoteIntent.swift']
-controlbuilds=[add('Controls'+ref,'PBXBuildFile',fileRef=ref) for ref in controlrefs+[intent]]
+# App intents the controls run; compiled into both, the app performs them.
+shared_intents=[refs[ROOT/'TVGlow/App'/name] for name in ['OpenRemoteIntent.swift','TogglePowerIntent.swift']]
+controlbuilds=[add('Controls'+ref,'PBXBuildFile',fileRef=ref) for ref in controlrefs+shared_intents]
 controls_settings={**base,'SDKROOT':'iphoneos','SUPPORTED_PLATFORMS':'iphoneos iphonesimulator','TARGETED_DEVICE_FAMILY':'1,2','IPHONEOS_DEPLOYMENT_TARGET':'18.0','PRODUCT_NAME':'TVGlowControls','PRODUCT_MODULE_NAME':'TVGlowControls','PRODUCT_BUNDLE_IDENTIFIER':'com.anna.tvglow.ios.controls','INFOPLIST_FILE':'TVGlowControls/Info.plist','SKIP_INSTALL':'YES','APPLICATION_EXTENSION_API_ONLY':'YES','LD_RUNPATH_SEARCH_PATHS':['$(inherited)','@executable_path/Frameworks','@executable_path/../../Frameworks']}
 controls_settings.pop('ASSETCATALOG_COMPILER_APPICON_NAME')
 controls_phases=[add('Controlssources','PBXSourcesBuildPhase',buildActionMask=2147483647,files=controlbuilds,runOnlyForDeploymentPostprocessing=0),
