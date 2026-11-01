@@ -84,6 +84,7 @@ struct LevelDrag {
 
 /// Lets a finger drag a panel open (up) or closed (down) 1:1, then picks where it settles
 /// from where the drag was heading, so a short flick is enough and a slow drag can be undone.
+/// Values past 0…1 are an overswipe; `RevealGeometry` turns them into rubber-band give.
 struct RevealDrag {
     /// Progress (0 hidden … 1 shown) when the drag began; nil between drags.
     private(set) var start: Double?
@@ -94,7 +95,7 @@ struct RevealDrag {
         let base = start ?? current
         start = base
         guard height > 0 else { return base }
-        return min(max(base - dy / height, 0), 1)
+        return min(max(base - dy / height, -1), 2)
     }
 
     /// Ends the drag. Returns whether the panel settles open, and the spring's initial velocity
@@ -107,7 +108,36 @@ struct RevealDrag {
         let remaining = (open ? 1.0 : 0.0) - progress
         guard abs(remaining) > 0.001 else { return (open, 0) }
         let speed = -velocityDY / height
-        return (open, min(max(speed / remaining, 0), 8))
+        return (open, min(max(speed / remaining, 0), 5))
+    }
+}
+
+/// Where the level panel is drawn for a reveal value. Within 0…1 the panel follows it exactly.
+/// Beyond that it gives like rubber, with growing resistance: past 1 the panel stretches taller,
+/// below 0 the handle drops below its resting place.
+struct RevealGeometry {
+    static let stretchLimit = 44.0
+    static let dropLimit = 28.0
+    /// 0…1, how much of the panel is shown.
+    let progress: Double
+    /// Height the panel takes up in the layout, excluding stretch.
+    let space: Double
+    /// Extra height of the panel past fully open.
+    let stretch: Double
+    /// How far the handle sits below its resting place past fully closed.
+    let drop: Double
+
+    init(reveal: Double, height: Double) {
+        progress = min(max(reveal, 0), 1)
+        space = max(height, 0) * progress
+        stretch = Self.rubber(max(0, reveal - 1) * height, limit: Self.stretchLimit)
+        drop = Self.rubber(max(0, -reveal) * height, limit: Self.dropLimit)
+    }
+
+    /// Scroll-view-style rubber band: about half the finger's travel at first, never past `limit`.
+    static func rubber(_ distance: Double, limit: Double) -> Double {
+        guard distance > 0, limit > 0 else { return 0 }
+        return (1 - 1 / (distance * 0.55 / limit + 1)) * limit
     }
 }
 

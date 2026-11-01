@@ -12,7 +12,10 @@ struct ContentView: View {
     @State private var flash: String?
     @State private var flashTask: Task<Void, Never>?
     @State private var feedback = 0
-    @AppStorage("showLevelSliders") private var showLevels = false
+    /// Plain state (saved to UserDefaults by hand): @AppStorage updates drop the animation
+    /// transaction, so a tap on the handle would jump instead of springing.
+    @State private var showLevels = UserDefaults.standard.bool(forKey: ContentView.levelsKey)
+    private static let levelsKey = "showLevelSliders"
     @State private var dragReveal: Double?
     @State private var levelsDrag = RevealDrag()
     @State private var panelHeight = 110.0
@@ -166,22 +169,13 @@ struct ContentView: View {
     /// Lives below the touch surface, never on it: a swipe that starts on the surface can't
     /// move a level, and a slip off a level bar can't reach Apple TV.
     private var levels: some View {
-        let progress = reveal
-        return VStack(spacing: 0) {
+        LevelsDrawer(reveal: reveal, panelHeight: panelHeight) { progress in
             handle(progress)
-            LevelsPanel(store: store)
-                .padding(.top, 6)
-                .fixedSize(horizontal: false, vertical: true)
-                .onGeometryChange(for: Double.self) { $0.size.height } action: { if $0 > 0 { panelHeight = $0 } }
-                // Slides up with the handle from behind the buttons.
-                .scaleEffect(0.94 + 0.06 * progress, anchor: .top)
-                .opacity(min(1, progress * 1.5))
-                .frame(height: panelHeight * progress, alignment: .top)
-                .clipShape(BottomEdgeClip())
-                .allowsHitTesting(progress > 0.99)
-                .accessibilityHidden(progress < 0.99)
+        } panel: { stretch in
+            LevelsPanel(store: store, stretch: stretch)
+        } onMeasure: { height in
+            if abs(height - panelHeight) > 0.5 { panelHeight = height }
         }
-        .padding(.top, 4)
     }
 
     private func setLevels(_ visible: Bool) {
@@ -196,18 +190,19 @@ struct ContentView: View {
             dragReveal = nil
             showLevels = open
         }
+        UserDefaults.standard.set(open, forKey: Self.levelsKey)
     }
 
     /// The only way to show or hide the level bars: tap it, or drag it up / down. The panel
     /// follows the finger and settles where the drag was heading.
     private func handle(_ progress: Double) -> some View {
         GrabberChevron(bend: 1 - 2 * progress)
-            .stroke(.white, style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
-            .frame(width: 40, height: 11)
+            .stroke(.white, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+            .frame(width: 24, height: 6)
             .animation(.snappy(duration: 0.18)) {
-                $0.opacity(handleTouched ? 0.95 : 0.6).scaleEffect(handleTouched ? 1.12 : 1)
+                $0.opacity(handleTouched ? 0.9 : 0.5).scaleEffect(handleTouched ? 1.1 : 1)
             }
-            .frame(maxWidth: .infinity).frame(height: 34)
+            .frame(maxWidth: .infinity).frame(height: 30)
             .contentShape(Rectangle())
             .onTapGesture { setLevels(!showLevels) }
             .gesture(handleDrag)
@@ -221,6 +216,7 @@ struct ContentView: View {
             }
             .accessibilityElement().accessibilityAddTraits(.isButton)
             .accessibilityLabel(showLevels ? "Hide volume and brightness" : "Show volume and brightness")
+            .accessibilityAction { setLevels(!showLevels) }
             .accessibilityIdentifier("levelsToggle")
             .overlay(alignment: .trailing) {
                 SurfaceIcon(symbol: "gearshape", label: "Connections") { showingConnections = true }
@@ -269,9 +265,49 @@ struct ContentView: View {
     }
 }
 
+/// The handle and the level panel below the touch surface, laid out for a reveal value that
+/// can overshoot 0…1 (see `RevealGeometry`). Animatable, so a bouncing spring is laid out frame
+/// by frame: the touch surface above resizes in step and the panel never gets a negative height.
+struct LevelsDrawer<Handle: View, Panel: View>: View, Animatable {
+    var reveal: Double
+    let panelHeight: Double
+    @ViewBuilder let handle: (Double) -> Handle
+    @ViewBuilder let panel: (Double) -> Panel
+    /// Reports the panel's natural height, without stretch.
+    let onMeasure: (Double) -> Void
+
+    var animatableData: Double {
+        get { reveal }
+        set { reveal = newValue }
+    }
+
+    var body: some View {
+        let geometry = RevealGeometry(reveal: reveal, height: panelHeight)
+        VStack(spacing: 0) {
+            handle(geometry.progress).offset(y: geometry.drop)
+            panel(geometry.stretch)
+                .padding(.top, 6)
+                .fixedSize(horizontal: false, vertical: true)
+                .onGeometryChange(for: Double.self) { $0.size.height } action: { [stretch = geometry.stretch] height in
+                    onMeasure(height - stretch)
+                }
+                // Slides up with the handle from behind the buttons.
+                .scaleEffect(0.94 + 0.06 * geometry.progress, anchor: .top)
+                .opacity(min(1, geometry.progress * 1.5))
+                .frame(height: geometry.space + geometry.stretch, alignment: .top)
+                .clipShape(BottomEdgeClip())
+                .allowsHitTesting(geometry.progress > 0.99)
+                .accessibilityHidden(geometry.progress < 0.99)
+        }
+        .padding(.top, 4)
+    }
+}
+
 /// Volume and brightness, revealed below the touch surface.
 struct LevelsPanel: View {
     @ObservedObject var store: ControlStore
+    /// Extra height while overswiped open: the glass stretches, the bars stay put.
+    var stretch = 0.0
 
     var body: some View {
         VStack(spacing: 4) {
@@ -322,7 +358,7 @@ struct LevelsPanel: View {
             }
         }
         .font(.system(size: 14))
-        .padding(.horizontal, 16).padding(.vertical, 10)
+        .padding(.horizontal, 16).padding(.vertical, 10 + stretch / 2)
         .remoteGlass(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .animation(.easeInOut(duration: 0.25), value: store.sonosConnected)

@@ -91,9 +91,35 @@ final class RevealDragTests: XCTestCase {
         var drag = RevealDrag()
         XCTAssertEqual(drag.progress(from: 0, dy: -30, height: 100), 0.3, accuracy: 0.0001)
         XCTAssertEqual(drag.progress(from: 1, dy: -55, height: 100), 0.55, accuracy: 0.0001, "The start is kept for the whole drag")
-        XCTAssertEqual(drag.progress(from: 0, dy: -400, height: 100), 1)
-        XCTAssertEqual(drag.progress(from: 0, dy: 40, height: 100), 0)
+        XCTAssertEqual(drag.progress(from: 0, dy: -130, height: 100), 1.3, accuracy: 0.0001, "Overswipe past open")
+        XCTAssertEqual(drag.progress(from: 0, dy: 40, height: 100), -0.4, accuracy: 0.0001, "Overswipe past closed")
+        XCTAssertEqual(drag.progress(from: 0, dy: -900, height: 100), 2, "Bounded")
         XCTAssertTrue(drag.isDragging)
+    }
+
+    func testOverswipeGivesLikeRubber() {
+        let open = RevealGeometry(reveal: 1, height: 100)
+        XCTAssertEqual(open.space, 100)
+        XCTAssertEqual(open.stretch, 0)
+        XCTAssertEqual(open.drop, 0)
+        let half = RevealGeometry(reveal: 0.5, height: 100)
+        XCTAssertEqual(half.space, 50)
+        XCTAssertEqual(half.progress, 0.5)
+
+        let pulled = RevealGeometry(reveal: 1.3, height: 100)
+        XCTAssertEqual(pulled.space, 100)
+        XCTAssertGreaterThan(pulled.stretch, 0)
+        XCTAssertLessThan(pulled.stretch, 30, "Resists: less than the finger's 30 pt")
+        let further = RevealGeometry(reveal: 2, height: 100)
+        XCTAssertGreaterThan(further.stretch, pulled.stretch)
+        XCTAssertLessThan(further.stretch, RevealGeometry.stretchLimit)
+
+        let dropped = RevealGeometry(reveal: -0.4, height: 100)
+        XCTAssertEqual(dropped.space, 0)
+        XCTAssertEqual(dropped.progress, 0)
+        XCTAssertGreaterThan(dropped.drop, 0)
+        XCTAssertLessThan(dropped.drop, RevealGeometry.dropLimit)
+        XCTAssertEqual(RevealGeometry.rubber(10, limit: 0), 0)
     }
 
     func testSlowPartialDragSpringsBack() {
@@ -112,7 +138,7 @@ final class RevealDragTests: XCTestCase {
         XCTAssertTrue(result.open)
         XCTAssertEqual(result.velocity, 2.5, accuracy: 0.0001)
         _ = drag.progress(from: 0, dy: -20, height: 100)
-        XCTAssertEqual(drag.end(at: 0.2, predictedDY: -300, velocityDY: -5000, height: 100).velocity, 8, "Capped")
+        XCTAssertEqual(drag.end(at: 0.2, predictedDY: -300, velocityDY: -5000, height: 100).velocity, 5, "Capped")
     }
 
     func testDraggingAnOpenPanelPastHalfwayCloses() {
