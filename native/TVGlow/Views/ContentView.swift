@@ -12,14 +12,6 @@ struct ContentView: View {
     @State private var flash: String?
     @State private var flashTask: Task<Void, Never>?
     @State private var feedback = 0
-    /// Plain state (saved to UserDefaults by hand): @AppStorage updates drop the animation
-    /// transaction, so a tap on the handle would jump instead of springing.
-    @State private var showLevels = UserDefaults.standard.bool(forKey: ContentView.levelsKey)
-    private static let levelsKey = "showLevelSliders"
-    @State private var dragReveal: Double?
-    @State private var levelsDrag = RevealDrag()
-    @State private var panelHeight = 110.0
-    @GestureState private var handleTouched = false
     @Environment(\.scenePhase) private var scenePhase
     /// Sonos level shown briefly after an iPhone volume button press.
     @State private var volumeHUD: Int?
@@ -36,7 +28,9 @@ struct ContentView: View {
                             .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .top)))
                     }
                 }
-            levels
+            // Its own view, so dragging it re-renders only the drawer: the rest of the remote
+            // just moves with the layout.
+            LevelsSection(store: store) { showingConnections = true }
             bottomButtons.padding(.top, 11)
         }
         .animation(.easeInOut(duration: 0.3), value: showsPlayback)
@@ -244,7 +238,46 @@ struct ContentView: View {
         .accessibilityLabel(title).help(title).accessibilityIdentifier(forward ? "skipForward" : "skipBackward")
     }
 
-    // MARK: Volume and brightness
+    // MARK: Bottom buttons
+
+    private var bottomButtons: some View {
+        // Spread edge to edge like the Remote app.
+        GlassGroup(spacing: 22) {
+            HStack(spacing: 0) {
+                remoteButton("Play / pause", symbol: "playpause", command: .playPause, diameter: 84, glyph: 21)
+                Spacer(minLength: 12)
+                remoteButton("Back", symbol: "chevron.left", command: .back, diameter: 110, glyph: 35)
+                Spacer(minLength: 12)
+                remoteButton("Home", symbol: "tv", command: .home, diameter: 84, glyph: 21)
+            }
+        }
+        .disabled(!remote.connected).opacity(remote.connected ? 1 : 0.4)
+        .animation(.easeInOut(duration: 0.3), value: remote.connected)
+    }
+
+    private func remoteButton(_ title: String, symbol: String, command: AppleRemoteCommand, diameter: CGFloat, glyph: CGFloat) -> some View {
+        CircleButton(symbol: symbol, diameter: diameter, glyph: glyph, weight: command == .back ? .light : .regular) {
+            feedback += 1
+            remote.press(command)
+        }
+        .accessibilityLabel("Apple TV \(title)").help(title).accessibilityIdentifier("appleTV_\(command.rawValue)")
+    }
+}
+
+/// Volume and brightness behind their handle, below the touch surface. Keeps the drag in its own
+/// state: a finger moving at 120 Hz re-renders only this drawer, not the whole remote.
+struct LevelsSection: View {
+    @ObservedObject var store: ControlStore
+    let showConnections: () -> Void
+    /// Plain state (saved to UserDefaults by hand): @AppStorage updates drop the animation
+    /// transaction, so a tap on the handle would jump instead of springing.
+    @State private var showLevels = UserDefaults.standard.bool(forKey: LevelsSection.levelsKey)
+    private static let levelsKey = "showLevelSliders"
+    @State private var dragReveal: Double?
+    @State private var levelsDrag = RevealDrag()
+    @State private var panelHeight = 110.0
+    @State private var feedback = 0
+    @GestureState private var handleTouched = false
 
     /// 0 hidden … 1 shown. Follows the finger while the handle is dragged. It drives both the
     /// panel and, through layout, the touch surface above it, so the two always move together.
@@ -252,7 +285,7 @@ struct ContentView: View {
 
     /// Lives below the touch surface, never on it: a swipe that starts on the surface can't
     /// move a level, and a slip off a level bar can't reach Apple TV.
-    private var levels: some View {
+    var body: some View {
         LevelsDrawer(reveal: reveal, panelHeight: panelHeight) { progress in
             handle(progress)
         } panel: { stretch in
@@ -260,6 +293,7 @@ struct ContentView: View {
         } onMeasure: { height in
             if abs(height - panelHeight) > 0.5 { panelHeight = height }
         }
+        .sensoryFeedback(.impact(weight: .light, intensity: 0.7), trigger: feedback)
     }
 
     private func setLevels(_ visible: Bool) {
@@ -303,7 +337,7 @@ struct ContentView: View {
             .accessibilityAction { setLevels(!showLevels) }
             .accessibilityIdentifier("levelsToggle")
             .overlay(alignment: .trailing) {
-                SurfaceIcon(symbol: "gearshape", label: "Connections") { showingConnections = true }
+                SurfaceIcon(symbol: "gearshape", label: "Connections", action: showConnections)
                     .accessibilityIdentifier("connectionsButton")
                     .opacity(progress).allowsHitTesting(progress > 0.99).accessibilityHidden(progress < 0.99)
             }
@@ -326,30 +360,6 @@ struct ContentView: View {
             }
     }
 
-    // MARK: Bottom buttons
-
-    private var bottomButtons: some View {
-        // Spread edge to edge like the Remote app.
-        GlassGroup(spacing: 22) {
-            HStack(spacing: 0) {
-                remoteButton("Play / pause", symbol: "playpause", command: .playPause, diameter: 84, glyph: 21)
-                Spacer(minLength: 12)
-                remoteButton("Back", symbol: "chevron.left", command: .back, diameter: 110, glyph: 35)
-                Spacer(minLength: 12)
-                remoteButton("Home", symbol: "tv", command: .home, diameter: 84, glyph: 21)
-            }
-        }
-        .disabled(!remote.connected).opacity(remote.connected ? 1 : 0.4)
-        .animation(.easeInOut(duration: 0.3), value: remote.connected)
-    }
-
-    private func remoteButton(_ title: String, symbol: String, command: AppleRemoteCommand, diameter: CGFloat, glyph: CGFloat) -> some View {
-        CircleButton(symbol: symbol, diameter: diameter, glyph: glyph, weight: command == .back ? .light : .regular) {
-            feedback += 1
-            remote.press(command)
-        }
-        .accessibilityLabel("Apple TV \(title)").help(title).accessibilityIdentifier("appleTV_\(command.rawValue)")
-    }
 }
 
 /// The handle and the level panel below the touch surface, laid out for a reveal value that
@@ -378,8 +388,8 @@ struct LevelsDrawer<Handle: View, Panel: View>: View, Animatable {
                 .onGeometryChange(for: Double.self) { $0.size.height } action: { [stretch = geometry.stretch] height in
                     onMeasure(height - stretch)
                 }
-                // Slides up with the handle from behind the buttons.
-                .scaleEffect(0.94 + 0.06 * geometry.progress, anchor: .top)
+                // Slides up with the handle from behind the buttons. No scale: re-rendering the
+                // glass at a new size every frame made the drag stutter.
                 .opacity(min(1, geometry.progress * 1.5))
                 .frame(height: geometry.space + geometry.stretch, alignment: .top)
                 .clipShape(BottomEdgeClip())

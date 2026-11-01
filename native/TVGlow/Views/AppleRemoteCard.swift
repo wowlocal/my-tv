@@ -11,7 +11,6 @@ struct AppleRemoteCard<Accessory: View, Controls: View>: View {
     @FocusState private var padFocused: Bool
     @State private var navigation = RemoteTouchNavigation()
     @State private var feedback = 0
-    @State private var size: CGSize = .zero
     /// Where the finger is, for the soft glow that follows it.
     @State private var touchPoint: CGPoint?
     @State private var ripples: [Ripple] = []
@@ -35,7 +34,6 @@ struct AppleRemoteCard<Accessory: View, Controls: View>: View {
             .padding(.bottom, 14)
         }
         .overlay { shape.strokeBorder(.white.opacity(padFocused ? 0.16 : 0), lineWidth: 1) }
-        .onGeometryChange(for: CGSize.self) { $0.size } action: { size = $0 }
         .animation(.easeInOut(duration: 0.3), value: remote.connected)
         .animation(.easeInOut(duration: 0.25), value: remote.snapshot.phase)
         .sensoryFeedback(.impact(weight: .light, intensity: 0.6), trigger: feedback)
@@ -87,7 +85,7 @@ struct AppleRemoteCard<Accessory: View, Controls: View>: View {
         remote.press(command)
         feedback += 1
         switch command {
-        case .select: ripple(at: point ?? CGPoint(x: size.width / 2, y: size.height / 2))
+        case .select: ripple(at: point)
         case .up, .down, .left, .right: flash(command)
         default: break
         }
@@ -112,7 +110,8 @@ struct AppleRemoteCard<Accessory: View, Controls: View>: View {
                     .transition(.opacity)
             }
             ForEach(ripples) { ripple in
-                RippleView().position(ripple.point)
+                // Keyboard and accessibility selects have no touch point: ripple from the centre.
+                if let point = ripple.point { RippleView().position(point) } else { RippleView() }
             }
             if let cue {
                 Image(systemName: cue.symbol).font(.system(size: 22, weight: .semibold))
@@ -127,7 +126,7 @@ struct AppleRemoteCard<Accessory: View, Controls: View>: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func ripple(at point: CGPoint) {
+    private func ripple(at point: CGPoint?) {
         let ripple = Ripple(point: point)
         ripples.append(ripple)
         Task {
@@ -164,7 +163,7 @@ struct AppleRemoteCard<Accessory: View, Controls: View>: View {
 
 private struct Ripple: Identifiable {
     let id = UUID()
-    let point: CGPoint
+    let point: CGPoint?
 }
 
 /// A ring that expands and fades where the surface was tapped.

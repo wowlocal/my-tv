@@ -72,10 +72,10 @@ enum RemoteChrome {
     static let surface = Color(red: 28 / 255, green: 28 / 255, blue: 30 / 255)
     static let stroke = Color.white.opacity(0.13)
     static let press = Animation.spring(response: 0.28, dampingFraction: 0.62)
-    /// Opens and closes the level bars with a rubbery bounce. `velocity` carries a released
+    /// Opens and closes the level bars with a light bounce. `velocity` carries a released
     /// finger's speed on.
     static func reveal(velocity: Double = 0) -> Animation {
-        .interpolatingSpring(duration: 0.55, bounce: 0.38, initialVelocity: velocity)
+        .interpolatingSpring(duration: 0.5, bounce: 0.22, initialVelocity: velocity)
     }
 
     static var hasGlass: Bool {
