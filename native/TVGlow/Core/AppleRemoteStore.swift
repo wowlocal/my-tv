@@ -406,6 +406,12 @@ final class AppleRemoteStore: ObservableObject {
         notice = nil; hasError = false
     }
 
+    /// Opens the player's info panel, as swiping down on the Siri Remote does during playback.
+    func showInfo() {
+        guard snapshot.playback.active else { return }
+        press(.down)
+    }
+
     /// Turns subtitles off, or on in the language picked last time (else the device's language).
     func toggleSubtitles(now: Date = Date()) {
         let playback = snapshot.playback

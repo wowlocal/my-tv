@@ -52,6 +52,18 @@ final class PlaybackTests: XCTestCase {
         XCTAssertEqual(driver.skips, [false], "nothing is queued while offline")
     }
 
+    func testInfoOpensThePlayerPanelOnlyWhileSomethingPlays() {
+        let driver = MockAppleRemoteDriver()
+        let store = connectedStore(driver, playback: AppleRemotePlayback())
+        defer { store.stop() }
+        store.showInfo()
+        XCTAssertTrue(driver.commands.isEmpty, "nothing loaded: no stray down press")
+        driver.snapshot.playback = showPlayback()
+        store.synchronize()
+        store.showInfo()
+        XCTAssertEqual(driver.commands, [.down])
+    }
+
     // MARK: Subtitles
 
     func testTurningSubtitlesOnPrefersTheLanguagePickedLastTime() {

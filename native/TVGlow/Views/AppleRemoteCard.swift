@@ -1,12 +1,13 @@
 import SwiftUI
 
-/// The large touch surface of the Remote app. Swipe to move, tap to select. Every touch on it
-/// belongs to Apple TV: nothing else on the surface reacts to touches.
-/// `accessory` is pinned to the bottom edge of the surface and is display-only (status text).
-struct AppleRemoteCard<Accessory: View>: View {
+/// The large touch surface of the Remote app. Swipe to move, tap to select. Touches belong to
+/// Apple TV, except on `controls`: the playback buttons along the bottom edge, as in the Remote app.
+/// `accessory` sits above them and is display-only (status text).
+struct AppleRemoteCard<Accessory: View, Controls: View>: View {
     @ObservedObject var remote: AppleRemoteStore
     let showDevices: () -> Void
     @ViewBuilder let accessory: () -> Accessory
+    @ViewBuilder let controls: () -> Controls
     @FocusState private var padFocused: Bool
     @State private var navigation = RemoteTouchNavigation()
     @State private var feedback = 0
@@ -20,13 +21,18 @@ struct AppleRemoteCard<Accessory: View>: View {
 
     var body: some View {
         ZStack {
-            shape.fill(Color(white: 0.122))
+            shape.fill(RemoteChrome.surface)
             effects.clipShape(shape).allowsHitTesting(false)
             touchLayer
             if !remote.connected {
                 disconnectedContent.transition(.opacity.combined(with: .scale(scale: 0.94)))
             }
-            VStack { Spacer(minLength: 0); accessory() }.padding(14).allowsHitTesting(false)
+            VStack(spacing: 6) {
+                Spacer(minLength: 0)
+                accessory().padding(.horizontal, 14).allowsHitTesting(false)
+                controls()
+            }
+            .padding(.bottom, 14)
         }
         .overlay { shape.strokeBorder(.white.opacity(padFocused ? 0.16 : 0), lineWidth: 1) }
         .onGeometryChange(for: CGSize.self) { $0.size } action: { size = $0 }

@@ -68,6 +68,8 @@ struct DeviceMessage: View {
 enum RemoteChrome {
     static let fill = Color(white: 0.06)
     static let pressed = Color(white: 0.16)
+    /// The Remote app's touch surface (#1C1C1E).
+    static let surface = Color(red: 28 / 255, green: 28 / 255, blue: 30 / 255)
     static let stroke = Color.white.opacity(0.13)
     static let press = Animation.spring(response: 0.28, dampingFraction: 0.62)
     /// Opens and closes the level bars with a rubbery bounce. `velocity` carries a released
@@ -173,13 +175,44 @@ struct BottomEdgeClip: Shape {
 /// The small white Apple TV app badge shown in the device capsule.
 struct TVBadge: View {
     var body: some View {
-        HStack(spacing: 0.5) {
-            Image(systemName: "applelogo").font(.system(size: 7.5, weight: .bold))
-            Text("tv").font(.system(size: 9, weight: .bold))
+        HStack(spacing: 0.3) {
+            Image(systemName: "applelogo").font(.system(size: 5.3, weight: .bold))
+            Text("tv").font(.system(size: 6.4, weight: .bold))
         }
-        .foregroundStyle(.black).frame(width: 21, height: 21)
-        .background(.white, in: RoundedRectangle(cornerRadius: 5.5, style: .continuous))
+        .foregroundStyle(.black).frame(width: 14.5, height: 14.5)
+        .background(.white, in: RoundedRectangle(cornerRadius: 3.8, style: .continuous))
         .accessibilityHidden(true)
+    }
+}
+
+/// A plain white glyph on the touch surface, like the Remote app's playback controls.
+/// Dimmed when disabled; its tap target stays small so taps beside it still reach Apple TV.
+struct PadIconButton: View {
+    let symbol: String
+    var pulsing = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: 24.5))
+                .contentTransition(.symbolEffect(.replace))
+                .symbolEffect(.pulse, options: .repeating, isActive: pulsing)
+                .animation(.snappy(duration: 0.25), value: symbol)
+                .frame(width: 56, height: 50).contentShape(Rectangle())
+        }
+        .buttonStyle(PadIconStyle())
+    }
+}
+
+struct PadIconStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(.white.opacity(isEnabled ? (configuration.isPressed ? 0.45 : 1) : 0.4))
+            .scaleEffect(configuration.isPressed ? 0.88 : 1)
+            .animation(RemoteChrome.press, value: configuration.isPressed)
+            .animation(.easeInOut(duration: 0.25), value: isEnabled)
     }
 }
 

@@ -24,15 +24,14 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            topBar.padding(.bottom, 22)
-            AppleRemoteCard(remote: remote, showDevices: { showingDevices = true }) { statusText }
+            topBar.padding(.bottom, 32)
+            AppleRemoteCard(remote: remote, showDevices: { showingDevices = true }) { statusText } controls: { playbackBar }
                 .frame(maxHeight: .infinity)
-            if showsPlayback { playbackControls.padding(.top, 12) }
             levels
-            bottomButtons.padding(.top, 12)
+            bottomButtons.padding(.top, 11)
         }
-        .animation(.snappy(duration: 0.35), value: showsPlayback)
-        .padding(.horizontal, 15).padding(.top, 8).padding(.bottom, 10)
+        .animation(.easeInOut(duration: 0.3), value: showsPlayback)
+        .padding(.horizontal, 16).padding(.bottom, 15)
         .frame(maxWidth: 520).frame(maxWidth: .infinity, maxHeight: .infinity)
         .background { Color.black.ignoresSafeArea() }
         .foregroundStyle(GlowTheme.ink).tint(GlowTheme.accent).preferredColorScheme(.dark)
@@ -67,8 +66,8 @@ struct ContentView: View {
     }
 
     private var topBar: some View {
-        GlassGroup(spacing: 14) { HStack(spacing: 14) {
-            CircleButton(symbol: store.muted ? "speaker.slash.fill" : "speaker.slash", diameter: 50, highlighted: store.muted) {
+        GlassGroup(spacing: 16) { HStack(spacing: 16) {
+            CircleButton(symbol: store.muted ? "speaker.slash.fill" : "speaker.slash", diameter: 56, glyph: 18.5, highlighted: store.muted) {
                 feedback += 1
                 Task { await store.toggleMute() }
             }
@@ -78,22 +77,22 @@ struct ContentView: View {
             .accessibilityLabel(store.muted ? "Unmute Sonos" : "Mute Sonos").accessibilityIdentifier("muteButton")
 
             Button { showingDevices = true } label: {
-                HStack(spacing: 8) {
+                HStack(spacing: 10) {
                     TVBadge()
-                    Text(deviceName).font(.system(size: 17, weight: .semibold)).lineLimit(1)
+                    Text(deviceName).font(.system(size: 15, weight: .semibold)).lineLimit(1)
                         .contentTransition(.opacity)
                     if remote.snapshot.phase.isBusy {
                         ProgressView().controlSize(.small).tint(GlowTheme.muted)
                             .transition(.opacity.combined(with: .scale(scale: 0.6)))
                     } else {
-                        Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(GlowTheme.muted)
+                        Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold)).foregroundStyle(GlowTheme.muted)
                             .transition(.opacity.combined(with: .scale(scale: 0.6)))
                     }
                 }
                 .opacity(remote.connected ? 1 : 0.55)
                 .animation(.snappy(duration: 0.3), value: remote.snapshot.phase)
                 .animation(.easeInOut(duration: 0.3), value: deviceName)
-                .padding(.horizontal, 16).frame(maxWidth: .infinity).frame(height: 50)
+                .padding(.horizontal, 16).frame(maxWidth: .infinity).frame(height: 56)
                 .remoteGlass(Capsule(), interactive: true)
                 .contentShape(Capsule())
             }
@@ -104,7 +103,7 @@ struct ContentView: View {
                     .presentationCompactAdaptation(.popover)
             }
 
-            CircleButton(symbol: "power", diameter: 50, pulsing: store.tvPowerBusy, action: togglePower)
+            CircleButton(symbol: "power", diameter: 56, glyph: 18.5, pulsing: store.tvPowerBusy, action: togglePower)
                 .disabled(store.tvPowerBusy)
                 .contextMenu {
                     Button("Turn On TV", systemImage: "power") { powerOn() }
@@ -172,40 +171,44 @@ struct ContentView: View {
     private var playback: AppleRemotePlayback { remote.snapshot.playback }
     private var showsPlayback: Bool { remote.connected && playback.hasControls }
 
-    /// Like the Remote app: while a show is loaded, skip back · subtitles · skip forward appear
-    /// under the touch surface. Each button is shown only when the player on Apple TV supports it.
-    private var playbackControls: some View {
-        GlassGroup(spacing: 22) {
-            HStack(spacing: 22) {
-                if playback.canSkipBackward {
-                    skipButton(forward: false, seconds: playback.skipBackwardInterval)
+    /// Like the Remote app: while a show is loaded, skip back · info · subtitles · skip forward sit
+    /// along the bottom of the touch surface. The four keep their places; a control the player
+    /// on Apple TV doesn't offer is dimmed.
+    @ViewBuilder
+    private var playbackBar: some View {
+        if showsPlayback {
+            HStack(spacing: 0) {
+                skipButton(forward: false, seconds: playback.skipBackwardInterval, enabled: playback.canSkipBackward)
+                Spacer(minLength: 0)
+                PadIconButton(symbol: "info.circle") {
+                    feedback += 1
+                    remote.showInfo()
                 }
-                if !playback.subtitles.isEmpty {
-                    CircleButton(symbol: playback.subtitlesOn ? "captions.bubble.fill" : "captions.bubble", diameter: 56, glyph: 21,
-                                 highlighted: playback.subtitlesOn, pulsing: remote.subtitlesPending) {
-                        feedback += 1
-                        remote.toggleSubtitles()
-                    }
-                    .contextMenu { subtitleMenu }
-                    .accessibilityLabel(playback.subtitlesOn ? "Turn subtitles off" : "Turn subtitles on")
-                    .help("Subtitles (touch and hold to choose a language)").accessibilityIdentifier("subtitlesButton")
+                .accessibilityLabel("Show info").help("Show info").accessibilityIdentifier("infoButton")
+                Spacer(minLength: 0)
+                PadIconButton(symbol: playback.subtitlesOn ? "captions.bubble.fill" : "captions.bubble", pulsing: remote.subtitlesPending) {
+                    feedback += 1
+                    remote.toggleSubtitles()
                 }
-                if playback.canSkipForward {
-                    skipButton(forward: true, seconds: playback.skipForwardInterval)
-                }
+                .disabled(playback.subtitles.isEmpty)
+                .contextMenu { subtitleMenu }
+                .accessibilityLabel(playback.subtitlesOn ? "Turn subtitles off" : "Turn subtitles on")
+                .help("Subtitles (touch and hold to choose a language)").accessibilityIdentifier("subtitlesButton")
+                Spacer(minLength: 0)
+                skipButton(forward: true, seconds: playback.skipForwardInterval, enabled: playback.canSkipForward)
             }
-            .animation(.snappy(duration: 0.3), value: playback.subtitles.isEmpty)
+            .padding(.horizontal, 14)
+            .transition(.opacity)
         }
-        .frame(maxWidth: .infinity)
-        .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .top)))
     }
 
-    private func skipButton(forward: Bool, seconds: Double) -> some View {
+    private func skipButton(forward: Bool, seconds: Double, enabled: Bool) -> some View {
         let title = "Skip \(forward ? "forward" : "back") \(Int(seconds.rounded())) seconds"
-        return CircleButton(symbol: AppleRemotePlayback.skipSymbol(forward: forward, seconds: seconds), diameter: 56, glyph: 21) {
+        return PadIconButton(symbol: AppleRemotePlayback.skipSymbol(forward: forward, seconds: seconds)) {
             feedback += 1
             remote.skip(forward: forward)
         }
+        .disabled(!enabled)
         .accessibilityLabel(title).help(title).accessibilityIdentifier(forward ? "skipForward" : "skipBackward")
     }
 
@@ -306,11 +309,14 @@ struct ContentView: View {
     // MARK: Bottom buttons
 
     private var bottomButtons: some View {
+        // Spread edge to edge like the Remote app.
         GlassGroup(spacing: 22) {
-            HStack(spacing: 22) {
-                remoteButton("Play / pause", symbol: "playpause", command: .playPause, diameter: 77, glyph: 24)
-                remoteButton("Back", symbol: "chevron.left", command: .back, diameter: 100, glyph: 36)
-                remoteButton("Home", symbol: "tv", command: .home, diameter: 77, glyph: 24)
+            HStack(spacing: 0) {
+                remoteButton("Play / pause", symbol: "playpause", command: .playPause, diameter: 84, glyph: 21)
+                Spacer(minLength: 12)
+                remoteButton("Back", symbol: "chevron.left", command: .back, diameter: 110, glyph: 35)
+                Spacer(minLength: 12)
+                remoteButton("Home", symbol: "tv", command: .home, diameter: 84, glyph: 21)
             }
         }
         .disabled(!remote.connected).opacity(remote.connected ? 1 : 0.4)
