@@ -70,7 +70,10 @@ enum RemoteChrome {
     static let pressed = Color(white: 0.16)
     static let stroke = Color.white.opacity(0.13)
     static let press = Animation.spring(response: 0.28, dampingFraction: 0.62)
-    static let reveal = Animation.spring(response: 0.42, dampingFraction: 0.82)
+    /// Opens and closes the level bars. `velocity` carries a released finger's speed on.
+    static func reveal(velocity: Double = 0) -> Animation {
+        .interpolatingSpring(duration: 0.42, bounce: 0.06, initialVelocity: velocity)
+    }
 
     static var hasGlass: Bool {
         if #available(iOS 26.0, macOS 26.0, *) { return true }
@@ -136,6 +139,33 @@ struct CircleButtonStyle: ButtonStyle {
             .scaleEffect(configuration.isPressed ? (RemoteChrome.hasGlass ? 0.96 : 0.92) : 1)
             .animation(RemoteChrome.press, value: configuration.isPressed)
             .animation(.easeInOut(duration: 0.25), value: highlighted)
+    }
+}
+
+/// A grabber that bends into a chevron: 1 points up (pull up to open), -1 points down
+/// (pull down to close), 0 is flat. Animatable, so it bends as the panel follows the finger.
+struct GrabberChevron: Shape {
+    var bend: Double
+    var animatableData: Double {
+        get { bend }
+        set { bend = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let lift = rect.height / 2 * min(max(bend, -1), 1)
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.midY + lift))
+        path.addLine(to: CGPoint(x: rect.midX, y: rect.midY - lift))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.midY + lift))
+        return path
+    }
+}
+
+/// Clips only the bottom edge, so a panel can be cut off as it slides behind the buttons
+/// while its glass edge and shadow still show at the sides.
+struct BottomEdgeClip: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path(CGRect(x: rect.minX - 40, y: rect.minY - 40, width: rect.width + 80, height: rect.height + 40))
     }
 }
 

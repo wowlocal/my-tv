@@ -82,6 +82,35 @@ struct LevelDrag {
     }
 }
 
+/// Lets a finger drag a panel open (up) or closed (down) 1:1, then picks where it settles
+/// from where the drag was heading, so a short flick is enough and a slow drag can be undone.
+struct RevealDrag {
+    /// Progress (0 hidden … 1 shown) when the drag began; nil between drags.
+    private(set) var start: Double?
+    var isDragging: Bool { start != nil }
+
+    /// Progress for the current vertical translation. `current` is read on the first call.
+    mutating func progress(from current: Double, dy: Double, height: Double) -> Double {
+        let base = start ?? current
+        start = base
+        guard height > 0 else { return base }
+        return min(max(base - dy / height, 0), 1)
+    }
+
+    /// Ends the drag. Returns whether the panel settles open, and the spring's initial velocity
+    /// relative to the distance left, so the release carries on at the finger's speed.
+    mutating func end(at progress: Double, predictedDY: Double, velocityDY: Double, height: Double) -> (open: Bool, velocity: Double) {
+        let base = start ?? progress
+        start = nil
+        guard height > 0 else { return (progress > 0.5, 0) }
+        let open = base - predictedDY / height > 0.5
+        let remaining = (open ? 1.0 : 0.0) - progress
+        guard abs(remaining) > 0.001 else { return (open, 0) }
+        let speed = -velocityDY / height
+        return (open, min(max(speed / remaining, 0), 8))
+    }
+}
+
 @MainActor
 protocol AppleRemoteDriving: AnyObject {
     var snapshot: AppleRemoteSnapshot { get }

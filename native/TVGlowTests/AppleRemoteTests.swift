@@ -86,6 +86,50 @@ final class LevelDragTests: XCTestCase {
     }
 }
 
+final class RevealDragTests: XCTestCase {
+    func testPanelFollowsTheFingerOneToOne() {
+        var drag = RevealDrag()
+        XCTAssertEqual(drag.progress(from: 0, dy: -30, height: 100), 0.3, accuracy: 0.0001)
+        XCTAssertEqual(drag.progress(from: 1, dy: -55, height: 100), 0.55, accuracy: 0.0001, "The start is kept for the whole drag")
+        XCTAssertEqual(drag.progress(from: 0, dy: -400, height: 100), 1)
+        XCTAssertEqual(drag.progress(from: 0, dy: 40, height: 100), 0)
+        XCTAssertTrue(drag.isDragging)
+    }
+
+    func testSlowPartialDragSpringsBack() {
+        var drag = RevealDrag()
+        _ = drag.progress(from: 0, dy: -30, height: 100)
+        let result = drag.end(at: 0.3, predictedDY: -35, velocityDY: -40, height: 100)
+        XCTAssertFalse(result.open)
+        XCTAssertEqual(result.velocity, 0, "Moving away from where it settles carries no velocity")
+        XCTAssertFalse(drag.isDragging)
+    }
+
+    func testShortFlickOpensWithTheFingersSpeed() {
+        var drag = RevealDrag()
+        _ = drag.progress(from: 0, dy: -20, height: 100)
+        let result = drag.end(at: 0.2, predictedDY: -60, velocityDY: -200, height: 100)
+        XCTAssertTrue(result.open)
+        XCTAssertEqual(result.velocity, 2.5, accuracy: 0.0001)
+        _ = drag.progress(from: 0, dy: -20, height: 100)
+        XCTAssertEqual(drag.end(at: 0.2, predictedDY: -300, velocityDY: -5000, height: 100).velocity, 8, "Capped")
+    }
+
+    func testDraggingAnOpenPanelPastHalfwayCloses() {
+        var drag = RevealDrag()
+        XCTAssertEqual(drag.progress(from: 1, dy: 70, height: 100), 0.3, accuracy: 0.0001)
+        let result = drag.end(at: 0.3, predictedDY: 80, velocityDY: 100, height: 100)
+        XCTAssertFalse(result.open)
+        XCTAssertEqual(result.velocity, 1 / 0.3, accuracy: 0.0001)
+    }
+
+    func testUnknownHeightNeverMovesThePanel() {
+        var drag = RevealDrag()
+        XCTAssertEqual(drag.progress(from: 1, dy: 80, height: 0), 1)
+        XCTAssertEqual(drag.end(at: 1, predictedDY: 300, velocityDY: 900, height: 0).open, true)
+    }
+}
+
 @MainActor
 final class MockAppleRemoteDriver: AppleRemoteDriving {
     var snapshot = AppleRemoteSnapshot(devices: [.init(id: "tv", name: "tv", model: "AppleTV14,1")])
