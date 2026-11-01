@@ -876,6 +876,20 @@ public final class AppleTVManager {
         }
     }
 
+    /// Skips the player on Apple TV by `seconds` (negative skips back), like the Remote app's
+    /// skip buttons: Companion `_mcc` 7 (SkipBy) with `_skpS`. Apple TV's rapportd turns it into a
+    /// MediaRemote skip with interval |seconds| on the Apple TV itself, so it doesn't depend on
+    /// the MRP tunnel.
+    public func skip(by seconds: Double) {
+        performOrQueueCompanionCommand { [weak self] in
+            log.notice("Companion SkipBy \(seconds)")
+            self?.connection?.sendRequest(eventName: "_mcc", content: .dictionary([("_mcc", .int(7)), ("_skpS", .float64(seconds))]),
+                                          responseHandler: { response in
+                log.notice("Companion SkipBy reply: \(Self.describe(response))")
+            })
+        }
+    }
+
     private func handleNowPlayingInfo(_ message: OPACK.Value) {
         guard let data = message["_c"]?["NowPlayingInfoKey"]?.dataValue else {
             log.notice("Companion NowPlayingInfo without NowPlayingInfoKey (\(Self.describe(message)))")

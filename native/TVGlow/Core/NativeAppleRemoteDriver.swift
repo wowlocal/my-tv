@@ -72,7 +72,11 @@ final class NativeAppleRemoteDriver: AppleRemoteDriving {
         let mrp = manager.mrpManager
         let command: MediaCommand = forward ? .skipForward : .skipBackward
         let seconds = interval(command)
-        if mrp.supportedCommands.contains(command) {
+        if manager.mediaControlFlags != nil {
+            // Like the Remote app: Companion SkipBy, run by Apple TV itself. MRP's tunnel drops
+            // and reconnects often, and its command list can miss skips the player supports.
+            manager.skip(by: forward ? seconds : -seconds)
+        } else if mrp.supportedCommands.contains(command) {
             mrp.sendSkip(command, interval: Float(seconds))
         } else if let nowPlaying = mrp.nowPlaying, mrp.supportedCommands.contains(.seekToPlaybackPosition) {
             // Some players only take absolute seeks.
