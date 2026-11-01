@@ -85,7 +85,8 @@ struct LevelDrag {
 
 /// Lets a finger drag a panel open (up) or closed (down) 1:1, then picks where it settles
 /// from where the drag was heading, so a short flick is enough and a slow drag can be undone.
-/// Values past 0…1 are an overswipe; `RevealGeometry` turns them into rubber-band give.
+/// Values past 0…1 are an overswipe; `RevealGeometry` turns them into rubber-band give, which
+/// approaches its limit smoothly, so the drag itself is barely bounded.
 struct RevealDrag {
     /// Progress (0 hidden … 1 shown) when the drag began; nil between drags.
     private(set) var start: Double?
@@ -96,20 +97,18 @@ struct RevealDrag {
         let base = start ?? current
         start = base
         guard height > 0 else { return base }
-        return min(max(base - dy / height, -1), 2)
+        return min(max(base - dy / height, -4), 5)
     }
 
-    /// Ends the drag. Returns whether the panel settles open, and the spring's initial velocity
-    /// relative to the distance left, so the release carries on at the finger's speed.
+    /// Ends the drag. Returns whether the panel settles open, and the finger's speed in progress
+    /// per second (positive opens) for `RevealSettle`, so the release carries on exactly as fast
+    /// as the finger moved: a hard flick overshoots into the rubber band and springs back.
     mutating func end(at progress: Double, predictedDY: Double, velocityDY: Double, height: Double) -> (open: Bool, velocity: Double) {
         let base = start ?? progress
         start = nil
         guard height > 0 else { return (progress > 0.5, 0) }
         let open = base - predictedDY / height > 0.5
-        let remaining = (open ? 1.0 : 0.0) - progress
-        guard abs(remaining) > 0.001 else { return (open, 0) }
-        let speed = -velocityDY / height
-        return (open, min(max(speed / remaining, 0), 5))
+        return (open, min(max(-velocityDY / height, -30), 30))
     }
 }
 

@@ -269,31 +269,48 @@ struct ContentView: View {
 struct LevelsSection: View {
     @ObservedObject var store: ControlStore
     let showConnections: () -> Void
-    /// Plain state (saved to UserDefaults by hand): @AppStorage updates drop the animation
-    /// transaction, so a tap on the handle would jump instead of springing.
+    /// Plain state, saved to UserDefaults by hand.
     @State private var showLevels = UserDefaults.standard.bool(forKey: LevelsSection.levelsKey)
     private static let levelsKey = "showLevelSliders"
+    /// Where the finger holds the panel during a drag.
     @State private var dragReveal: Double?
+    /// The spring carrying the panel to rest after a release or a tap.
+    @State private var settling: RevealSettle?
     @State private var levelsDrag = RevealDrag()
     @State private var panelHeight = 110.0
     @State private var feedback = 0
     @GestureState private var handleTouched = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// 0 hidden … 1 shown. Follows the finger while the handle is dragged. It drives both the
-    /// panel and, through layout, the touch surface above it, so the two always move together.
-    private var reveal: Double { dragReveal ?? (showLevels ? 1 : 0) }
+    /// 0 hidden … 1 shown, past either end while rubber-banding. It drives both the panel and,
+    /// through layout, the touch surface above it, so the two always move together.
+    private func reveal(at date: Date) -> Double {
+        if let dragReveal { return dragReveal }
+        if let settling { return settling.value(at: date) }
+        return showLevels ? 1 : 0
+    }
 
     /// Lives below the touch surface, never on it: a swipe that starts on the surface can't
     /// move a level, and a slip off a level bar can't reach Apple TV.
     var body: some View {
-        LevelsDrawer(reveal: reveal, panelHeight: panelHeight) { progress in
-            handle(progress)
-        } panel: { stretch in
-            LevelsPanel(store: store, stretch: stretch)
-        } onMeasure: { height in
-            if abs(height - panelHeight) > 0.5 { panelHeight = height }
+        // Ticks at the display's frame rate only while the panel springs to rest.
+        TimelineView(.animation(paused: settling == nil)) { context in
+            LevelsDrawer(reveal: reveal(at: context.date), panelHeight: panelHeight) { progress in
+                handle(progress)
+            } panel: { stretch in
+                LevelsPanel(store: store, stretch: stretch)
+            } onMeasure: { height in
+                if abs(height - panelHeight) > 0.5 { panelHeight = height }
+            }
         }
         .sensoryFeedback(.impact(weight: .light, intensity: 0.7), trigger: feedback)
+        .task(id: settling) {
+            guard let spring = settling else { return }
+            while !Task.isCancelled, !spring.isFinished(at: Date()) {
+                try? await Task.sleep(nanoseconds: 50_000_000)
+            }
+            if !Task.isCancelled, settling == spring { settling = nil }
+        }
     }
 
     private func setLevels(_ visible: Bool) {
@@ -301,18 +318,18 @@ struct LevelsSection: View {
         settle(open: visible)
     }
 
-    /// Springs the panel to its resting place. One animation moves the panel and the touch surface.
+    /// Springs the panel to rest from where it is now, at `velocity` (progress per second).
     private func settle(open: Bool, velocity: Double = 0) {
+        let from = reveal(at: Date())
         if open != showLevels { feedback += 1 }
-        withAnimation(RemoteChrome.reveal(velocity: velocity)) {
-            dragReveal = nil
-            showLevels = open
-        }
+        showLevels = open
+        dragReveal = nil
+        settling = RevealSettle(start: Date(), from: from, to: open ? 1 : 0, velocity: velocity, bounce: reduceMotion ? 0 : 0.3)
         UserDefaults.standard.set(open, forKey: Self.levelsKey)
     }
 
     /// The only way to show or hide the level bars: tap it, or drag it up / down. The panel
-    /// follows the finger and settles where the drag was heading.
+    /// follows the finger and settles where the drag was heading, at the finger's speed.
     private func handle(_ progress: Double) -> some View {
         GrabberChevron(bend: 1 - 2 * progress)
             .stroke(.white, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
@@ -329,7 +346,7 @@ struct LevelsSection: View {
                 // The system cancelled the drag (onEnded never ran): settle where it started.
                 DispatchQueue.main.async {
                     guard levelsDrag.isDragging else { return }
-                    settle(open: levelsDrag.end(at: reveal, predictedDY: 0, velocityDY: 0, height: panelHeight).open)
+                    settle(open: levelsDrag.end(at: reveal(at: Date()), predictedDY: 0, velocityDY: 0, height: panelHeight).open)
                 }
             }
             .accessibilityElement().accessibilityAddTraits(.isButton)
@@ -348,18 +365,21 @@ struct LevelsSection: View {
         DragGesture(minimumDistance: 4, coordinateSpace: .global)
             .updating($handleTouched) { _, touched, _ in touched = true }
             .onChanged { value in
-                let progress = levelsDrag.progress(from: reveal, dy: value.translation.height, height: panelHeight)
+                // A drag that starts mid-spring picks the panel up exactly where it is.
+                let progress = levelsDrag.progress(from: reveal(at: Date()), dy: value.translation.height, height: panelHeight)
                 var exact = Transaction()
                 exact.disablesAnimations = true
-                withTransaction(exact) { dragReveal = progress }
+                withTransaction(exact) {
+                    settling = nil
+                    dragReveal = progress
+                }
             }
             .onEnded { value in
-                let result = levelsDrag.end(at: reveal, predictedDY: value.predictedEndTranslation.height,
+                let result = levelsDrag.end(at: reveal(at: Date()), predictedDY: value.predictedEndTranslation.height,
                                             velocityDY: value.velocity.height, height: panelHeight)
                 settle(open: result.open, velocity: result.velocity)
             }
     }
-
 }
 
 /// The handle and the level panel below the touch surface, laid out for a reveal value that

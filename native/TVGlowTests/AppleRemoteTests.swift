@@ -87,13 +87,39 @@ final class LevelDragTests: XCTestCase {
 }
 
 final class RevealDragTests: XCTestCase {
+    func testSettleCarriesTheFlickIntoTheRubberBandAndSpringsBack() {
+        let start = Date()
+        // Released right at "open" while still moving up fast: no distance left, but real speed.
+        let flick = RevealSettle(start: start, from: 1, to: 1, velocity: 12)
+        let peak = (1...40).map { flick.value(at: start.addingTimeInterval(Double($0) / 120)) }.max() ?? 1
+        XCTAssertGreaterThan(peak, 1.2, "overshoots past open, so the panel stretches like rubber")
+        XCTAssertFalse(flick.isFinished(at: start.addingTimeInterval(0.1)))
+        XCTAssertTrue(flick.isFinished(at: start.addingTimeInterval(2.5)))
+        XCTAssertEqual(flick.value(at: start.addingTimeInterval(2.5)), 1, accuracy: 0.002, "and comes back to rest")
+
+        let gentle = RevealSettle(start: start, from: 1, to: 1, velocity: 3)
+        let gentlePeak = (1...40).map { gentle.value(at: start.addingTimeInterval(Double($0) / 120)) }.max() ?? 1
+        XCTAssertLessThan(gentlePeak, peak, "a slower flick stretches less: speed matters")
+    }
+
+    func testSettleStartsExactlyWhereTheFingerLetGo() {
+        let start = Date()
+        let settle = RevealSettle(start: start, from: 0.42, to: 0, velocity: -2)
+        XCTAssertEqual(settle.value(at: start), 0.42, accuracy: 0.0001)
+        XCTAssertLessThan(settle.value(at: start.addingTimeInterval(1 / 60)), 0.42, "keeps moving the finger's way")
+        let calm = RevealSettle(start: start, from: 0, to: 1, velocity: 0, bounce: 0)
+        let samples = (0...240).map { calm.value(at: start.addingTimeInterval(Double($0) / 120)) }
+        XCTAssertLessThanOrEqual(samples.max() ?? 0, 1.0001, "Reduce Motion: no overshoot")
+    }
+
     func testPanelFollowsTheFingerOneToOne() {
         var drag = RevealDrag()
         XCTAssertEqual(drag.progress(from: 0, dy: -30, height: 100), 0.3, accuracy: 0.0001)
         XCTAssertEqual(drag.progress(from: 1, dy: -55, height: 100), 0.55, accuracy: 0.0001, "The start is kept for the whole drag")
         XCTAssertEqual(drag.progress(from: 0, dy: -130, height: 100), 1.3, accuracy: 0.0001, "Overswipe past open")
         XCTAssertEqual(drag.progress(from: 0, dy: 40, height: 100), -0.4, accuracy: 0.0001, "Overswipe past closed")
-        XCTAssertEqual(drag.progress(from: 0, dy: -900, height: 100), 2, "Bounded")
+        XCTAssertEqual(drag.progress(from: 0, dy: -300, height: 100), 3, accuracy: 0.0001, "A hard pull keeps stretching; the rubber band gives the resistance")
+        XCTAssertEqual(drag.progress(from: 0, dy: -900, height: 100), 5, "Bounded far beyond the rubber band's limit")
         XCTAssertTrue(drag.isDragging)
     }
 
@@ -127,7 +153,7 @@ final class RevealDragTests: XCTestCase {
         _ = drag.progress(from: 0, dy: -30, height: 100)
         let result = drag.end(at: 0.3, predictedDY: -35, velocityDY: -40, height: 100)
         XCTAssertFalse(result.open)
-        XCTAssertEqual(result.velocity, 0, "Moving away from where it settles carries no velocity")
+        XCTAssertEqual(result.velocity, 0.4, accuracy: 0.0001, "The finger's own speed, even when it settles the other way")
         XCTAssertFalse(drag.isDragging)
     }
 
@@ -136,9 +162,12 @@ final class RevealDragTests: XCTestCase {
         _ = drag.progress(from: 0, dy: -20, height: 100)
         let result = drag.end(at: 0.2, predictedDY: -60, velocityDY: -200, height: 100)
         XCTAssertTrue(result.open)
-        XCTAssertEqual(result.velocity, 2.5, accuracy: 0.0001)
+        XCTAssertEqual(result.velocity, 2, accuracy: 0.0001, "Absolute: 200 pt/s over a 100 pt panel")
         _ = drag.progress(from: 0, dy: -20, height: 100)
-        XCTAssertEqual(drag.end(at: 0.2, predictedDY: -300, velocityDY: -5000, height: 100).velocity, 5, "Capped")
+        XCTAssertEqual(drag.end(at: 0.2, predictedDY: -300, velocityDY: -2500, height: 100).velocity, 25, accuracy: 0.0001,
+                       "A fast flick keeps its speed instead of being throttled")
+        _ = drag.progress(from: 0, dy: -20, height: 100)
+        XCTAssertEqual(drag.end(at: 0.2, predictedDY: -300, velocityDY: -9000, height: 100).velocity, 30, "Only absurd speeds are capped")
     }
 
     func testDraggingAnOpenPanelPastHalfwayCloses() {
@@ -146,7 +175,7 @@ final class RevealDragTests: XCTestCase {
         XCTAssertEqual(drag.progress(from: 1, dy: 70, height: 100), 0.3, accuracy: 0.0001)
         let result = drag.end(at: 0.3, predictedDY: 80, velocityDY: 100, height: 100)
         XCTAssertFalse(result.open)
-        XCTAssertEqual(result.velocity, 1 / 0.3, accuracy: 0.0001)
+        XCTAssertEqual(result.velocity, -1, accuracy: 0.0001)
     }
 
     func testUnknownHeightNeverMovesThePanel() {
