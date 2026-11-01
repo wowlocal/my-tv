@@ -205,6 +205,9 @@ final class MockAppleRemoteDriver: AppleRemoteDriving {
     func skip(forward: Bool) { skips.append(forward) }
     func setSubtitles(_ on: Bool) { subtitleRequests.append(on) }
     func sendText(_ text: String) { texts.append(text) }
+    /// Answers to attentionState(), in order; nil once used up.
+    var attentionStates: [Int?] = []
+    func attentionState() async -> Int? { attentionStates.isEmpty ? nil : attentionStates.removeFirst() }
     var paired: Set<String> = []
     var pairedLookups = 0
     func isPaired(deviceID: String) -> Bool { pairedLookups += 1; return paired.contains(deviceID) }
@@ -376,6 +379,58 @@ final class AppleRemoteTests: XCTestCase {
         let woke = await waking.value
         XCTAssertTrue(woke)
         XCTAssertEqual(driver.commands, [.wake])
+    }
+
+    func testAwakeAppleTVIsPutToSleepFirstSoWakingSwitchesTheTVOn() async {
+        // TV switched off on its own while Apple TV stayed awake: a bare wake would do nothing.
+        let driver = MockAppleRemoteDriver()
+        driver.snapshot.phase = .connected
+        driver.attentionStates = [3, 3, 1]
+        let underTest = store(driver)
+        defer { underTest.stop() }
+        underTest.synchronize()
+        let woke = await underTest.wake(timeout: 1, sleepTimeout: 2, poll: 0.01)
+        XCTAssertTrue(woke)
+        XCTAssertEqual(driver.commands, [.sleep, .wake])
+    }
+
+    func testSleepingAppleTVIsWokenDirectly() async {
+        let driver = MockAppleRemoteDriver()
+        driver.snapshot.phase = .connected
+        driver.attentionStates = [1]
+        let underTest = store(driver)
+        defer { underTest.stop() }
+        underTest.synchronize()
+        let woke = await underTest.wake(timeout: 1, sleepTimeout: 2, poll: 0.01)
+        XCTAssertTrue(woke)
+        XCTAssertEqual(driver.commands, [.wake])
+    }
+
+    func testWakeStillFollowsWhenAppleTVNeverReportsSleep() async {
+        let driver = MockAppleRemoteDriver()
+        driver.snapshot.phase = .connected
+        driver.attentionStates = [3]
+        let underTest = store(driver)
+        defer { underTest.stop() }
+        underTest.synchronize()
+        let woke = await underTest.wake(timeout: 1, sleepTimeout: 0.1, poll: 0.01)
+        XCTAssertTrue(woke)
+        XCTAssertEqual(driver.commands, [.sleep, .wake])
+    }
+
+    func testSleepAppleTVNeedsAPairedAppleTV() async {
+        let driver = MockAppleRemoteDriver()
+        let underTest = store(driver)
+        defer { underTest.stop() }
+        underTest.synchronize()
+        let slept = await underTest.sleepAppleTV(timeout: 0.5)
+        XCTAssertFalse(slept)
+        XCTAssertTrue(driver.commands.isEmpty)
+        driver.snapshot.phase = .connected
+        underTest.synchronize()
+        let sleptNow = await underTest.sleepAppleTV(timeout: 0.5)
+        XCTAssertTrue(sleptNow)
+        XCTAssertEqual(driver.commands, [.sleep])
     }
 
     func testWakeWithoutPairedAppleTVDoesNothing() async {

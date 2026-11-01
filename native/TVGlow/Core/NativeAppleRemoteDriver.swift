@@ -64,6 +64,7 @@ final class NativeAppleRemoteDriver: AppleRemoteDriving {
         case .home: button = .home
         case .playPause: button = .playPause
         case .wake: button = .wake
+        case .sleep: button = .sleep
         }
         manager.pressButton(button)
     }
@@ -94,6 +95,12 @@ final class NativeAppleRemoteDriver: AppleRemoteDriving {
             manager.setCaptionsEnabled(on)
         } else {
             manager.setCaptionSetting(on ? AppleRemotePlayback.Captions.alwaysOn : AppleRemotePlayback.Captions.off)
+        }
+    }
+
+    func attentionState() async -> Int? {
+        await withCheckedContinuation { continuation in
+            manager.fetchAttentionState { continuation.resume(returning: $0) }
         }
     }
 

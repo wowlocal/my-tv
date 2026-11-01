@@ -30,7 +30,7 @@ struct ContentView: View {
                 }
             // Its own view, so dragging it re-renders only the drawer: the rest of the remote
             // just moves with the layout.
-            LevelsSection(store: store) { showingConnections = true }
+            LevelsSection(store: store, showConnections: { showingConnections = true }, turnOnTV: { powerOn() })
             bottomButtons.padding(.top, 11)
         }
         .animation(.easeInOut(duration: 0.3), value: showsPlayback)
@@ -180,6 +180,9 @@ struct ContentView: View {
         Task {
             await store.turnOffTV()
             show(store.tvMessage)
+            // Like the Siri Remote's power button, Apple TV sleeps with the TV: nothing keeps playing
+            // to a dark screen, and the next power-on wakes it, which switches the TV on (HDMI-CEC).
+            if store.wakeWithAppleTV, store.tvKnownOff { await remote.sleepAppleTV() }
         }
     }
 
@@ -290,6 +293,7 @@ struct ContentView: View {
 struct LevelsSection: View {
     @ObservedObject var store: ControlStore
     let showConnections: () -> Void
+    let turnOnTV: () -> Void
     /// Plain state, saved to UserDefaults by hand.
     @State private var showLevels = UserDefaults.standard.bool(forKey: LevelsSection.levelsKey)
     private static let levelsKey = "showLevelSliders"
@@ -319,7 +323,7 @@ struct LevelsSection: View {
             LevelsDrawer(reveal: reveal(at: context.date), panelHeight: panelHeight) { progress in
                 handle(progress)
             } panel: { stretch in
-                LevelsPanel(store: store, stretch: stretch)
+                LevelsPanel(store: store, stretch: stretch, turnOnTV: turnOnTV)
             } onMeasure: { height in
                 if abs(height - panelHeight) > 0.5 { panelHeight = height }
             }
@@ -446,6 +450,8 @@ struct LevelsPanel: View {
     @ObservedObject var store: ControlStore
     /// Extra height while overswiped open: the glass stretches, the bars stay put.
     var stretch = 0.0
+    /// Offered instead of Connect when the TV is known to be off: connecting to it can't work.
+    var turnOnTV: (() -> Void)? = nil
 
     var body: some View {
         VStack(spacing: 4) {
@@ -487,6 +493,13 @@ struct LevelsPanel: View {
                     value(Int(store.brightnessDraft))
                 } else if store.tvConnecting {
                     offline("Connecting to TV…")
+                } else if store.tvPowerBusy {
+                    offline("Turning on the TV…")
+                } else if store.tvKnownOff, let turnOnTV {
+                    Button("Turn On TV", action: turnOnTV)
+                        .buttonStyle(.plain).font(.system(size: 13, weight: .medium)).foregroundStyle(GlowTheme.ink)
+                        .accessibilityIdentifier("turnOnTVButton")
+                    Spacer(minLength: 0)
                 } else {
                     Button("Connect TV") { Task { await store.connectTV() } }
                         .buttonStyle(.plain).font(.system(size: 13, weight: .medium)).foregroundStyle(GlowTheme.ink)

@@ -18,7 +18,11 @@ struct TVPowerControls: View {
             .help("Wake LG over the network and, when paired, through Apple TV (HDMI-CEC).")
 
             Button {
-                Task { await store.turnOffTV() }
+                Task {
+                    await store.turnOffTV()
+                    // Apple TV sleeps with the TV, so the next wake switches the TV on (HDMI-CEC).
+                    if store.wakeWithAppleTV, store.tvKnownOff { await remote.sleepAppleTV() }
+                }
             } label: {
                 Label("Turn off", systemImage: "power.circle")
                     .frame(maxWidth: .infinity).padding(.vertical, 9)

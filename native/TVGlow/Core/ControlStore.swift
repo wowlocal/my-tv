@@ -10,6 +10,9 @@ final class ControlStore: ObservableObject {
     @Published private(set) var tvPowerBusy = false
     @Published private(set) var tvConnected = false
     @Published private(set) var tvConnecting = false
+    /// The paired TV didn't answer on the network, or accepted power-off: it is off, so connecting
+    /// can't work and the remote offers to turn it on instead.
+    @Published private(set) var tvKnownOff = false
     @Published private(set) var awaitingTVApproval = false
     @Published private(set) var brightness: Int?
     @Published var brightnessDraft: Double = 0
@@ -103,6 +106,7 @@ final class ControlStore: ObservableObject {
         guard !tvConnected, !tvConnecting, !tvPowerBusy, !applyingBrightness, !editingBrightness, tvAutoFailures < 3,
               let host = try? LocalAddress.validated(tvAddress), isPaired(host) else { return }
         guard await wakeSender.isReachable(host: host) else {
+            if !tvConnected { tvKnownOff = true }
             if !tvError && !tvConnected && !tvPowerBusy { tvMessage = "TV is off. TV Glow connects when it turns on." }
             return
         }
@@ -134,6 +138,7 @@ final class ControlStore: ObservableObject {
             brightness = current
             brightnessDraft = Double(current)
             tvConnected = true
+            tvKnownOff = false
             tvAutoFailures = 0
             tvMessage = "Live from your TV."
         } catch {
@@ -152,6 +157,7 @@ final class ControlStore: ObservableObject {
             try await tv.powerOff()
             tv.disconnect()
             tvConnected = false
+            tvKnownOff = true
             brightness = nil
             tvMessage = "TV accepted the power-off command."
         } catch {

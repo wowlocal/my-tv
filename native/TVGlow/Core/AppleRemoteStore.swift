@@ -24,7 +24,7 @@ struct AppleRemoteSnapshot: Equatable {
 }
 
 enum AppleRemoteCommand: String, CaseIterable {
-    case up, down, left, right, select, back, home, playPause, wake
+    case up, down, left, right, select, back, home, playPause, wake, sleep
 }
 
 /// Converts cumulative touch-surface translation into discrete remote presses.
@@ -155,6 +155,9 @@ protocol AppleRemoteDriving: AnyObject {
     /// Turns subtitles on or off on Apple TV.
     func setSubtitles(_ on: Bool)
     func sendText(_ text: String)
+    /// Whether Apple TV is asleep: pyatv's SystemStatus (1 asleep, 2 screensaver, 3 awake, 4 idle),
+    /// nil when unknown. Read-only.
+    func attentionState() async -> Int?
     /// Whether this app already holds pairing credentials for the device.
     /// Only paired devices are connected automatically; pairing always needs the user.
     func isPaired(deviceID: String) -> Bool
@@ -315,29 +318,58 @@ final class AppleRemoteStore: ObservableObject {
         }
     }
 
-    /// Wakes the TV through Apple TV (HDMI-CEC), first connecting to an already paired Apple TV
-    /// when needed. Returns false without starting pairing if no paired Apple TV is available.
+    static let asleep = 1
+
+    /// Turns the TV on through Apple TV (HDMI-CEC), first connecting to an already paired Apple TV
+    /// when needed. Apple TV only tells the TV to switch on when it wakes from sleep, so an Apple TV
+    /// that is still awake (the TV was switched off on its own) is put to sleep first, and woken
+    /// once it reports being asleep. Returns false without starting pairing if no paired Apple TV
+    /// is available.
     @discardableResult
-    func wake(timeout: TimeInterval = 8) async -> Bool {
-        if !connected {
-            if !snapshot.phase.isBusy {
-                guard let device = pairedDeviceID() else { return false }
-                autoConnect = true
-                beginAutomaticConnection(to: device, now: Date())
-            }
-            let deadline = Date().addingTimeInterval(timeout)
-            while !connected && Date() < deadline {
-                do { try await Task.sleep(nanoseconds: 200_000_000) } catch { return false }
+    func wake(timeout: TimeInterval = 8, sleepTimeout: TimeInterval = 6, poll: TimeInterval = 0.5) async -> Bool {
+        guard await ensureConnected(timeout: timeout) else { return false }
+        if let state = await driver.attentionState(), state != Self.asleep {
+            driver.press(.sleep)
+            let deadline = Date().addingTimeInterval(sleepTimeout)
+            while Date() < deadline {
+                do { try await Task.sleep(nanoseconds: UInt64(poll * 1_000_000_000)) } catch { return false }
                 synchronize()
-                switch snapshot.phase {
-                case .disconnected, .failed: return false
-                default: break
-                }
+                if connected, await driver.attentionState() == Self.asleep { break }
             }
+            guard await ensureConnected(timeout: timeout) else { return false }
         }
-        guard connected else { return false }
         driver.press(.wake)
         return true
+    }
+
+    /// Puts Apple TV to sleep along with the TV, like the Siri Remote's power button, so nothing
+    /// keeps playing to a dark screen and the next wake switches the TV on. Connects to the paired
+    /// Apple TV first when needed.
+    @discardableResult
+    func sleepAppleTV(timeout: TimeInterval = 4) async -> Bool {
+        guard await ensureConnected(timeout: timeout) else { return false }
+        driver.press(.sleep)
+        return true
+    }
+
+    /// Connects to the paired Apple TV if needed (never pairing) and waits for it.
+    private func ensureConnected(timeout: TimeInterval) async -> Bool {
+        if connected { return true }
+        if !snapshot.phase.isBusy {
+            guard let device = pairedDeviceID() else { return false }
+            autoConnect = true
+            beginAutomaticConnection(to: device, now: Date())
+        }
+        let deadline = Date().addingTimeInterval(timeout)
+        while !connected && Date() < deadline {
+            do { try await Task.sleep(nanoseconds: 200_000_000) } catch { return false }
+            synchronize()
+            switch snapshot.phase {
+            case .disconnected, .failed: return false
+            default: break
+            }
+        }
+        return connected
     }
 
     /// Called when the app returns to the foreground. Suspended apps can lose Bonjour browsing

@@ -890,6 +890,27 @@ public final class AppleTVManager {
         }
     }
 
+    /// Asks whether Apple TV is asleep (Companion `FetchAttentionState`, as the Remote app does).
+    /// Calls back on the main queue with pyatv's SystemStatus: 1 asleep, 2 screensaver, 3 awake,
+    /// 4 idle; nil when Apple TV doesn't answer. Changes nothing.
+    public func fetchAttentionState(completion: @escaping (Int?) -> Void) {
+        guard let connection, connectionStatus == .connected else { completion(nil); return }
+        var answered = false
+        let finish: (Int?) -> Void = { state in
+            DispatchQueue.main.async {
+                guard !answered else { return }
+                answered = true
+                completion(state)
+            }
+        }
+        connection.sendRequest(eventName: "FetchAttentionState", content: .dict([]), responseHandler: { response in
+            let state = response["_c"]?["state"]?.intValue
+            log.notice("Companion attention state: \(state.map(String.init) ?? "none") (\(Self.describe(response)))")
+            finish(state.map(Int.init))
+        })
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { finish(nil) }
+    }
+
     private func handleNowPlayingInfo(_ message: OPACK.Value) {
         guard let data = message["_c"]?["NowPlayingInfoKey"]?.dataValue else {
             log.notice("Companion NowPlayingInfo without NowPlayingInfoKey (\(Self.describe(message)))")
