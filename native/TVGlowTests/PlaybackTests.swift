@@ -1,4 +1,5 @@
 import XCTest
+import ItsytvCore
 
 @MainActor
 final class PlaybackTests: XCTestCase {
@@ -51,6 +52,26 @@ final class PlaybackTests: XCTestCase {
         XCTAssertFalse(unknown.canToggleSubtitles, "dimmed until Apple TV reports its setting")
     }
 
+    func testThePlayersOwnSubtitleStateWinsOverTheSystemSetting() {
+        // Subtitles picked in the player: the system setting says off, the player shows them.
+        let picked = AppleRemotePlayback.make(flags: Flag.play, nowPlaying: true, mrpSkipBackward: false, mrpSkipForward: false,
+                                              captionsEnabled: true, hasCaptionOptions: true, captionSetting: 3)
+        XCTAssertTrue(picked.subtitlesOn)
+        XCTAssertTrue(picked.canToggleSubtitles)
+        let none = AppleRemotePlayback.make(flags: Flag.play, nowPlaying: true, mrpSkipBackward: false, mrpSkipForward: false,
+                                            captionsEnabled: false, hasCaptionOptions: false, captionSetting: 2)
+        XCTAssertFalse(none.subtitlesOn)
+        XCTAssertFalse(none.canToggleSubtitles, "a player without subtitles dims the button")
+    }
+
+    func testSubtitleRequestAsksForTheOppositeOfWhatIsShowing() {
+        let driver = MockAppleRemoteDriver()
+        let store = connectedStore(driver, playback: showPlayback(subtitlesOn: true))
+        defer { store.stop() }
+        store.toggleSubtitles()
+        XCTAssertEqual(driver.subtitleRequests, [false])
+    }
+
     func testSkipSymbolsOnlyUseIntervalsSFSymbolsDraws() {
         XCTAssertEqual(AppleRemotePlayback.skipSymbol(forward: true, seconds: 10), "goforward.10")
         XCTAssertEqual(AppleRemotePlayback.skipSymbol(forward: false, seconds: 15), "gobackward.15")
@@ -92,7 +113,7 @@ final class PlaybackTests: XCTestCase {
         let store = connectedStore(driver, playback: showPlayback(subtitlesOn: false))
         defer { store.stop() }
         store.toggleSubtitles(now: start)
-        XCTAssertEqual(driver.subtitleToggles, 1)
+        XCTAssertEqual(driver.subtitleRequests, [true])
         XCTAssertTrue(store.subtitlesPending)
 
         driver.snapshot.playback.subtitlesOn = true
@@ -115,12 +136,54 @@ final class PlaybackTests: XCTestCase {
         let store = connectedStore(driver, playback: playback)
         defer { store.stop() }
         store.toggleSubtitles()
-        XCTAssertEqual(driver.subtitleToggles, 0)
+        XCTAssertTrue(driver.subtitleRequests.isEmpty)
 
         driver.snapshot.playback = showPlayback()
         driver.snapshot.phase = .disconnected
         store.synchronize()
         store.toggleSubtitles()
-        XCTAssertEqual(driver.subtitleToggles, 0)
+        XCTAssertTrue(driver.subtitleRequests.isEmpty)
     }
+
+    // MARK: Reading Apple TV's NowPlayingInfo archive
+
+    func testNowPlayingInfoArchiveYieldsTheCaptionStateAndSkipsEverythingElse() throws {
+        let archiver = NSKeyedArchiver(requiringSecureCoding: false)
+        archiver.setClassName("TVRCNowPlayingInfo", for: FakeNowPlayingInfo.self)
+        archiver.setClassName("TVRCNowPlayingMetadata", for: FakeMetadata.self)
+        archiver.encode(FakeNowPlayingInfo(captions: true, valid: true), forKey: NSKeyedArchiveRootObjectKey)
+        archiver.finishEncoding()
+        let info = try XCTUnwrap(RemoteNowPlayingInfo.decode(archiver.encodedData))
+        XCTAssertEqual(info, RemoteNowPlayingInfo(captionsEnabled: true, hasValidCaptionOptions: true))
+
+        let off = NSKeyedArchiver(requiringSecureCoding: false)
+        off.setClassName("TVRCNowPlayingInfo", for: FakeNowPlayingInfo.self)
+        off.setClassName("TVRCNowPlayingMetadata", for: FakeMetadata.self)
+        off.encode(FakeNowPlayingInfo(captions: false, valid: nil), forKey: NSKeyedArchiveRootObjectKey)
+        off.finishEncoding()
+        XCTAssertEqual(RemoteNowPlayingInfo.decode(off.encodedData), RemoteNowPlayingInfo(captionsEnabled: false, hasValidCaptionOptions: nil))
+        XCTAssertNil(RemoteNowPlayingInfo.decode(Data("not an archive".utf8)))
+    }
+}
+
+/// Encodes like TVRemoteCore's TVRCNowPlayingInfo (NSNumber caption keys, nested metadata).
+@objc(TVGlowTestsFakeNowPlayingInfo)
+private final class FakeNowPlayingInfo: NSObject, NSCoding {
+    let captions: Bool?
+    let valid: Bool?
+    init(captions: Bool?, valid: Bool?) { self.captions = captions; self.valid = valid }
+    init?(coder: NSCoder) { nil }
+    func encode(with coder: NSCoder) {
+        coder.encode("episode", forKey: "identifier")
+        coder.encode(FakeMetadata(), forKey: "metadata")
+        coder.encode(captions.map(NSNumber.init(value:)), forKey: "captionsEnabled")
+        coder.encode(valid.map(NSNumber.init(value:)), forKey: "hasValidCaptionOptions")
+    }
+}
+
+@objc(TVGlowTestsFakeMetadata)
+private final class FakeMetadata: NSObject, NSCoding {
+    override init() {}
+    init?(coder: NSCoder) { nil }
+    func encode(with coder: NSCoder) { coder.encode("A Show", forKey: "title") }
 }

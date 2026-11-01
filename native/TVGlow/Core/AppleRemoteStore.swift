@@ -153,8 +153,8 @@ protocol AppleRemoteDriving: AnyObject {
     func press(_ command: AppleRemoteCommand)
     /// Skips by the player's preferred interval (10 s when it has none).
     func skip(forward: Bool)
-    /// Switches Apple TV's subtitle setting between always on and off.
-    func toggleSubtitles()
+    /// Turns subtitles on or off on Apple TV.
+    func setSubtitles(_ on: Bool)
     func sendText(_ text: String)
     /// Whether this app already holds pairing credentials for the device.
     /// Only paired devices are connected automatically; pairing always needs the user.
@@ -416,7 +416,7 @@ final class AppleRemoteStore: ObservableObject {
     func toggleSubtitles(now: Date = Date()) {
         let playback = snapshot.playback
         guard connected, playback.canToggleSubtitles else { return }
-        driver.toggleSubtitles()
+        driver.setSubtitles(!playback.subtitlesOn)
         subtitleRequest = (!playback.subtitlesOn, now)
         subtitlesPending = true
         notice = nil; hasError = false

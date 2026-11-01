@@ -8,9 +8,9 @@ struct AppleRemotePlayback: Equatable {
     var canSkipForward = false
     var skipBackwardInterval = 10.0
     var skipForwardInterval = 10.0
-    /// Apple TV reported its subtitle setting, so the subtitles button can toggle it.
+    /// Apple TV reported subtitle state, so the subtitles button can switch them.
     var canToggleSubtitles = false
-    /// Apple TV's subtitle setting is "always on".
+    /// Subtitles are showing (the player's own state when Apple TV reports it).
     var subtitlesOn = false
 
     var hasControls: Bool { active }
@@ -23,18 +23,21 @@ struct AppleRemotePlayback: Equatable {
         static let skipBackward: UInt64 = 0x400
     }
 
-    /// `_mcs` values of Companion's caption settings commands (from Apple's rapportd).
+    /// `_mcs` values of Companion's caption settings commands (from Apple's rapportd): the
+    /// fallback for Apple TVs that don't report the player's subtitles.
     enum Captions {
         static let alwaysOn = 2
-        /// Switches between always on and off (forced subtitles only), as the Remote app does.
-        static let toggle = 4
+        static let off = 3
     }
 
     /// Builds the row's state. `flags` are Companion's media-control flags, which follow the
     /// player on screen the way the Remote app does: they clear when you leave the player for
     /// the shows grid. Until Apple TV has sent any (nil), MRP's now-playing state stands in.
+    /// Subtitles come from the player (`captionsEnabled`, `hasCaptionOptions`, Companion
+    /// NowPlayingInfo) when Apple TV reports them, else from the system `captionSetting`.
     static func make(flags: UInt64?, nowPlaying: Bool, mrpSkipBackward: Bool, mrpSkipForward: Bool,
                      skipBackwardInterval: Double = 10, skipForwardInterval: Double = 10,
+                     captionsEnabled: Bool? = nil, hasCaptionOptions: Bool? = nil,
                      captionSetting: Int?) -> AppleRemotePlayback {
         var playback = AppleRemotePlayback()
         if let flags {
@@ -48,8 +51,13 @@ struct AppleRemotePlayback: Equatable {
         }
         playback.skipBackwardInterval = skipBackwardInterval
         playback.skipForwardInterval = skipForwardInterval
-        playback.canToggleSubtitles = playback.active && captionSetting != nil
-        playback.subtitlesOn = captionSetting == Captions.alwaysOn
+        if let captionsEnabled {
+            playback.canToggleSubtitles = playback.active && hasCaptionOptions != false
+            playback.subtitlesOn = captionsEnabled
+        } else {
+            playback.canToggleSubtitles = playback.active && captionSetting != nil
+            playback.subtitlesOn = captionSetting == Captions.alwaysOn
+        }
         return playback
     }
 

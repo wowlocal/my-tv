@@ -35,6 +35,7 @@ final class NativeAppleRemoteDriver: AppleRemoteDriving {
             mrpSkipBackward: commands.contains(.skipBackward) || canSeek,
             mrpSkipForward: commands.contains(.skipForward) || canSeek,
             skipBackwardInterval: interval(.skipBackward), skipForwardInterval: interval(.skipForward),
+            captionsEnabled: manager.nowPlayingInfo?.captionsEnabled, hasCaptionOptions: manager.nowPlayingInfo?.hasValidCaptionOptions,
             captionSetting: manager.captionSetting)
     }
 
@@ -82,9 +83,16 @@ final class NativeAppleRemoteDriver: AppleRemoteDriving {
         }
     }
 
-    /// Toggles Apple TV's subtitle setting the way Apple's Remote app does. Unlike switching
-    /// MRP language options (which muted the TV app's audio), this never touches audio.
-    func toggleSubtitles() { manager.setCaptionSetting(AppleRemotePlayback.Captions.toggle) }
+    /// Switches subtitles the way Apple's Remote app does: `ToggleCaptions` for the player on screen
+    /// when Apple TV reports its subtitles, else the system subtitle setting. Neither touches audio
+    /// (switching MRP language options muted the TV app's audio).
+    func setSubtitles(_ on: Bool) {
+        if manager.nowPlayingInfo?.captionsEnabled != nil {
+            manager.setCaptionsEnabled(on)
+        } else {
+            manager.setCaptionSetting(on ? AppleRemotePlayback.Captions.alwaysOn : AppleRemotePlayback.Captions.off)
+        }
+    }
 
     func isPaired(deviceID: String) -> Bool { KeychainStorage.load(for: deviceID) != nil }
 

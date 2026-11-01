@@ -101,7 +101,12 @@ public final class AppleTVManager {
     /// has sent one on this connection (it only sends them when they change).
     public var mediaControlFlags: UInt64?
     /// Apple TV's system subtitle setting, from Companion `_mcc` 12 (`_mcs`). 2 means always on.
+    /// Only the fallback for Apple TVs without direct caption queries; players don't follow it
+    /// once subtitles were picked in the player.
     public var captionSetting: Int?
+    /// Subtitle state of the player on screen, from the Companion `NowPlayingInfo` event, as the
+    /// Remote app reads it on Apple TVs with direct caption queries. nil until Apple TV sends one.
+    public var nowPlayingInfo: RemoteNowPlayingInfo?
     public var mrpManager = MRPManager()
     public var keyboardBlinkButton: CompanionButton = .select
     public var keyboardBlinkCounter = 0
@@ -272,6 +277,7 @@ public final class AppleTVManager {
         osVersion = nil
         mediaControlFlags = nil
         captionSetting = nil
+        nowPlayingInfo = nil
         if clearPendingCommands {
             pendingCompanionCommands.removeAll()
         }
@@ -806,7 +812,6 @@ public final class AppleTVManager {
             }
             self?.connection?.startKeepAlive()
             self?.connection?.startTouchSession()
-            self?.startMediaControlUpdates()
             // Start text input listener (like pyatv does on connect)
             self?.connection?.startTextInput { [weak self] response in
                 if let content = response["_c"],
@@ -828,6 +833,8 @@ public final class AppleTVManager {
                     self?.discovery.pause()
                     self?.flushPendingCompanionCommands()
                     self?.fetchApps()
+                    // After TVRCSessionStart: Apple TV answers remote-session requests only then.
+                    self?.startMediaControlUpdates()
                 }
             }
             self?.connection?.startTVRCSession { proceed() }
@@ -839,10 +846,45 @@ public final class AppleTVManager {
 
     // MARK: - Media control and captions (TV Glow)
 
-    /// Subscribes to `_iMC` media-control flag events and reads the subtitle setting. Read-only.
+    /// Subscribes to `_iMC` media-control flags and `NowPlayingInfo` (the Remote app's subtitle
+    /// state), and reads the current values. Read-only.
     private func startMediaControlUpdates() {
-        connection?.sendEvent(name: "_interest", content: .dictionary([("_regEvents", .array([.string("_iMC")]))]))
+        connection?.sendEvent(name: "_interest", content: .dictionary([("_regEvents", .array([.string("_iMC"), .string("NowPlayingInfo")]))]))
+        refreshNowPlayingInfo()
         refreshCaptionSetting()
+    }
+
+    /// Asks Apple TV to send its current `NowPlayingInfo` event. Changes nothing.
+    public func refreshNowPlayingInfo() {
+        connection?.sendRequest(eventName: "FetchCurrentNowPlayingInfoEvent", content: .dict([]), responseHandler: { [weak self] response in
+            // The info normally arrives as an event; accept it in the reply too.
+            if response["_c"]?["NowPlayingInfoKey"] != nil { self?.handleNowPlayingInfo(response) }
+        })
+    }
+
+    /// Turns the on-screen player's subtitles on or off, exactly as the Remote app does on Apple TVs
+    /// with direct caption queries (Companion request `ToggleCaptions`, `CaptionsEnabled` YES/NO).
+    /// Apple TV switches the player itself, so a subtitle track picked in the player is honoured.
+    public func setCaptionsEnabled(_ enabled: Bool) {
+        performOrQueueCompanionCommand { [weak self] in
+            log.notice("Companion ToggleCaptions CaptionsEnabled=\(enabled ? "YES" : "NO")")
+            self?.connection?.sendRequest(eventName: "ToggleCaptions", content: .dictionary([("CaptionsEnabled", .string(enabled ? "YES" : "NO"))]),
+                                          responseHandler: { response in
+                log.notice("Companion ToggleCaptions reply: \(Self.describe(response))")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { self?.refreshNowPlayingInfo() }
+            })
+        }
+    }
+
+    private func handleNowPlayingInfo(_ message: OPACK.Value) {
+        guard let data = message["_c"]?["NowPlayingInfoKey"]?.dataValue else {
+            log.notice("Companion NowPlayingInfo without NowPlayingInfoKey (\(Self.describe(message)))")
+            return
+        }
+        let info = RemoteNowPlayingInfo.decode(data)
+        log.notice("Companion NowPlayingInfo: captionsEnabled=\(info?.captionsEnabled.map(String.init) ?? "-") hasValidCaptionOptions=\(info?.hasValidCaptionOptions.map(String.init) ?? "-")\(info == nil ? " (unreadable, \(data.count) bytes)" : "")")
+        guard let info else { return }
+        DispatchQueue.main.async { if self.nowPlayingInfo != info { self.nowPlayingInfo = info } }
     }
 
     /// Reads Apple TV's subtitle setting (`_mcc` 12, GetCaptionSettings). Changes nothing.
@@ -875,7 +917,7 @@ public final class AppleTVManager {
             let changed = self.mediaControlFlags != UInt64(flags)
             self.mediaControlFlags = UInt64(flags)
             // The player changed (started, stopped, switched app); its subtitles may have too.
-            if changed { self.refreshCaptionSetting() }
+            if changed { self.refreshCaptionSetting(); self.refreshNowPlayingInfo() }
         }
     }
 
@@ -1061,6 +1103,7 @@ public final class AppleTVManager {
             let eventName = message["_i"]?.stringValue
             log.debug("Event: \(eventName ?? "?")")
             if eventName == "_iMC" { handleMediaControlEvent(message) }
+            if eventName == "NowPlayingInfo" { handleNowPlayingInfo(message) }
 
         case CompanionMessageType.response.rawValue:
             let xid = message["_x"]?.intValue ?? -1
