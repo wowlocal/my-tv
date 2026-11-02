@@ -176,6 +176,15 @@ final class RevealDragTests: XCTestCase {
         XCTAssertEqual(RevealGeometry.rubber(10, limit: 0), 0)
     }
 
+    func testSlidersFadeInLateAndAreFullyVisibleWhenOpen() {
+        XCTAssertEqual(RevealGeometry.contentOpacity(0), 0)
+        XCTAssertEqual(RevealGeometry.contentOpacity(0.2), 0, "not shown while the glass is still a sliver")
+        XCTAssertGreaterThan(RevealGeometry.contentOpacity(0.6), 0)
+        XCTAssertLessThan(RevealGeometry.contentOpacity(0.6), 1)
+        XCTAssertEqual(RevealGeometry.contentOpacity(0.95), 1)
+        XCTAssertEqual(RevealGeometry.contentOpacity(1.4), 1, "overpulled: stays visible")
+    }
+
     func testSlowPartialDragSpringsBack() {
         var drag = RevealDrag()
         _ = drag.progress(from: 0, dy: -30, height: 100)

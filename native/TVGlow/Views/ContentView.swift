@@ -330,8 +330,8 @@ struct LevelsSection: View {
             #endif
             LevelsDrawer(reveal: reveal(at: context.date), panelHeight: panelHeight) { progress in
                 handle(progress)
-            } panel: { stretch in
-                LevelsPanel(store: store, stretch: stretch, turnOnTV: turnOnTV)
+            } panel: {
+                LevelsPanel(store: store, turnOnTV: turnOnTV)
             } onMeasure: { height in
                 if abs(height - panelHeight) > 0.5 { panelHeight = height }
             }
@@ -505,11 +505,14 @@ struct LevelsSection: View {
 /// by frame: the touch surface above resizes in step and the panel never gets a negative height.
 struct LevelsDrawer<Handle: View, Panel: View>: View, Animatable {
     var reveal: Double
+    /// The gap above the panel plus the sliders' natural height (see `onMeasure`).
     let panelHeight: Double
     @ViewBuilder let handle: (Double) -> Handle
-    @ViewBuilder let panel: (Double) -> Panel
-    /// Reports the panel's natural height, without stretch.
+    /// The sliders, without their glass: the drawer sizes the glass to the space it has.
+    @ViewBuilder let panel: () -> Panel
+    /// Reports `panelHeight`: the gap plus the sliders' natural height.
     let onMeasure: (Double) -> Void
+    static var gap: Double { 6 }
 
     var animatableData: Double {
         get { reveal }
@@ -518,24 +521,33 @@ struct LevelsDrawer<Handle: View, Panel: View>: View, Animatable {
 
     var body: some View {
         let geometry = RevealGeometry(reveal: reveal, height: panelHeight)
+        let gap = Self.gap * geometry.progress
+        let glassHeight = max(0, geometry.space + geometry.stretch - gap)
+        let contentHeight = max(1, panelHeight - Self.gap)
         VStack(spacing: 0) {
             handle(geometry.progress).offset(y: geometry.drop)
-            panel(geometry.stretch)
-                .padding(.top, 6)
-                .fixedSize(horizontal: false, vertical: true)
-                .onGeometryChange(for: Double.self) { $0.size.height } action: { [stretch = geometry.stretch] height in
-                    onMeasure(height - stretch)
+            // The glass grows with the space it has: always a whole rounded panel, from a thin pill
+            // to full size, never cut. A hard pull stretches it like rubber.
+            let shape = RoundedRectangle(cornerRadius: min(22, glassHeight / 2), style: .continuous)
+            Color.clear
+                .frame(maxWidth: .infinity).frame(height: glassHeight)
+                .remoteGlass(shape)
+                .opacity(min(1, geometry.progress * 4))
+                .overlay {
+                    // The sliders fade in late and scale gently with the space, inside the glass's
+                    // rounded edge. An overlay, so their natural size never sizes the glass.
+                    Color.clear.overlay {
+                        panel()
+                            .fixedSize(horizontal: false, vertical: true)
+                            .onGeometryChange(for: Double.self) { $0.size.height } action: { onMeasure($0 + Self.gap) }
+                            .scaleEffect(max(0.85, min(1, glassHeight / contentHeight)), anchor: .center)
+                            .opacity(RevealGeometry.contentOpacity(geometry.progress))
+                    }
+                    .clipShape(shape)
                 }
-                // Rises into place and fades in. No scale: re-rendering the glass at a new size
-                // every frame made the drag stutter.
-                .offset(y: (1 - geometry.progress) * RevealGeometry.rise)
-                .opacity(min(1, geometry.progress * 1.5))
-                .frame(height: geometry.space + geometry.stretch, alignment: .top)
-                // Its lower edge dissolves into the dark while it appears, instead of a hard cut;
-                // fully open, nothing is masked.
-                .mask(alignment: .top) { SoftBottomMask(fade: RevealGeometry.fade * (1 - geometry.progress)) }
-                .allowsHitTesting(geometry.progress > 0.99)
-                .accessibilityHidden(geometry.progress < 0.99)
+                .padding(.top, gap)
+            .allowsHitTesting(geometry.progress > 0.99)
+            .accessibilityHidden(geometry.progress < 0.99)
         }
         .padding(.top, 4)
     }
@@ -544,8 +556,6 @@ struct LevelsDrawer<Handle: View, Panel: View>: View, Animatable {
 /// Volume and brightness, revealed below the touch surface.
 struct LevelsPanel: View {
     @ObservedObject var store: ControlStore
-    /// Extra height while overswiped open: the glass stretches, the bars stay put.
-    var stretch = 0.0
     /// Offered instead of Connect when the TV is known to be off: connecting to it can't work.
     var turnOnTV: (() -> Void)? = nil
 
@@ -605,8 +615,7 @@ struct LevelsPanel: View {
             }
         }
         .font(.system(size: 14))
-        .padding(.horizontal, 16).padding(.vertical, 10 + stretch / 2)
-        .remoteGlass(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .padding(.horizontal, 16).padding(.vertical, 10)
         .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .animation(.easeInOut(duration: 0.25), value: store.sonosConnected)
         .animation(.easeInOut(duration: 0.25), value: store.tvConnected)

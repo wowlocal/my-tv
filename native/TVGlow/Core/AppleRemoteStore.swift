@@ -118,10 +118,12 @@ struct RevealDrag {
 struct RevealGeometry {
     static let stretchLimit = 44.0
     static let dropLimit = 28.0
-    /// How far below its place the panel starts as it appears; it rises as it opens.
-    static let rise = 14.0
-    /// Height of the soft, dissolving lower edge while the panel appears (none when fully open).
-    static let fade = 30.0
+    /// The sliders' opacity while the panel opens: hidden for the first quarter, so they're never
+    /// shown tiny, then easing in to fully visible just before the panel is fully open.
+    static func contentOpacity(_ progress: Double) -> Double {
+        let t = min(max((progress - 0.25) / 0.7, 0), 1)
+        return t * t * (3 - 2 * t)
+    }
     /// 0…1, how much of the panel is shown.
     let progress: Double
     /// Height the panel takes up in the layout, excluding stretch.

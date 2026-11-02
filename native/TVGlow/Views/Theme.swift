@@ -159,21 +159,6 @@ struct GrabberChevron: Shape {
     }
 }
 
-/// Shows a panel down to the bottom of its space, with the last `fade` points dissolving into
-/// the dark rather than a hard cut. The sides and top stay open for the glass edge and shadow.
-struct SoftBottomMask: View {
-    var fade: Double
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Color.black
-            LinearGradient(colors: [.black, .black.opacity(0)], startPoint: .top, endPoint: .bottom)
-                .frame(height: max(0, fade))
-        }
-        .padding(.horizontal, -40).padding(.top, -40)
-    }
-}
-
 /// The small white Apple TV app badge shown in the device capsule.
 struct TVBadge: View {
     var body: some View {
