@@ -523,7 +523,6 @@ struct LevelsDrawer<Handle: View, Panel: View>: View, Animatable {
         let geometry = RevealGeometry(reveal: reveal, height: panelHeight)
         let gap = Self.gap * geometry.progress
         let glassHeight = max(0, geometry.space + geometry.stretch - gap)
-        let contentHeight = max(1, panelHeight - Self.gap)
         VStack(spacing: 0) {
             handle(geometry.progress).offset(y: geometry.drop)
             // The glass grows with the space it has: always a whole rounded panel, from a thin pill
@@ -534,13 +533,12 @@ struct LevelsDrawer<Handle: View, Panel: View>: View, Animatable {
                 .remoteGlass(shape)
                 .opacity(min(1, geometry.progress * 4))
                 .overlay {
-                    // The sliders fade in late and scale gently with the space, inside the glass's
-                    // rounded edge. An overlay, so their natural size never sizes the glass.
+                    // The sliders keep their size and fade in late, inside the glass's rounded edge.
+                    // An overlay, so their natural size never sizes the glass.
                     Color.clear.overlay {
                         panel()
                             .fixedSize(horizontal: false, vertical: true)
                             .onGeometryChange(for: Double.self) { $0.size.height } action: { onMeasure($0 + Self.gap) }
-                            .scaleEffect(max(0.85, min(1, glassHeight / contentHeight)), anchor: .center)
                             .opacity(RevealGeometry.contentOpacity(geometry.progress))
                     }
                     .clipShape(shape)
