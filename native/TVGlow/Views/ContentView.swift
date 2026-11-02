@@ -306,6 +306,11 @@ struct LevelsSection: View {
     @State private var feedback = 0
     @GestureState private var handleTouched = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    #if DEBUG && os(iOS)
+    /// Debug builds measure frame delivery for every drag, flick and tap (log category "Perf").
+    @State private var meter = FrameMeter()
+    @State private var perfSelfTest = false
+    #endif
 
     /// 0 hidden … 1 shown, past either end while rubber-banding. It drives both the panel and,
     /// through layout, the touch surface above it, so the two always move together.
@@ -320,6 +325,9 @@ struct LevelsSection: View {
     var body: some View {
         // Ticks at the display's frame rate only while the panel springs to rest.
         TimelineView(.animation(paused: settling == nil)) { context in
+            #if DEBUG && os(iOS)
+            let _ = meter.isRunning ? meter.drawerFrames += 1 : ()
+            #endif
             LevelsDrawer(reveal: reveal(at: context.date), panelHeight: panelHeight) { progress in
                 handle(progress)
             } panel: { stretch in
@@ -334,19 +342,101 @@ struct LevelsSection: View {
             while !Task.isCancelled, !spring.isFinished(at: Date()) {
                 try? await Task.sleep(nanoseconds: 50_000_000)
             }
-            if !Task.isCancelled, settling == spring { settling = nil }
+            if !Task.isCancelled, settling == spring {
+                settling = nil
+                #if DEBUG && os(iOS)
+                if meter.isRunning && !perfSelfTest { meter.stop(lastGesture) }
+                #endif
+            }
+        }
+        #if DEBUG && os(iOS)
+        .task {
+            // TVGLOW_PERF=1: run the drawer through drags, flicks and taps, measuring each.
+            if ProcessInfo.processInfo.environment["TVGLOW_PERF"] == "1" { await runPerfSelfTest() }
+        }
+        #endif
+    }
+
+    #if DEBUG && os(iOS)
+    @State private var lastGesture = "drag"
+
+    private enum PerfStep {
+        /// Finger-like drag from `from` to `to` over `seconds`, released at `release` progress/s.
+        case drag(String, from: Double, to: Double, seconds: Double, release: Double)
+        case tap(String)
+    }
+
+    private func runPerfSelfTest() async {
+        let originallyShown = showLevels
+        perfSelfTest = true
+        try? await Task.sleep(nanoseconds: 2_500_000_000)
+        let steps: [PerfStep] = [
+            .drag("slow drag open", from: 0, to: 1, seconds: 0.6, release: 0.5),
+            .drag("slow drag close", from: 1, to: 0, seconds: 0.6, release: -0.5),
+            .drag("fast flick open", from: 0, to: 0.55, seconds: 0.08, release: 14),
+            .drag("fast flick close", from: 1, to: 0.45, seconds: 0.08, release: -14),
+            .drag("pull past open, release", from: 0, to: 2.4, seconds: 0.5, release: 0),
+            .drag("close again", from: 1, to: 0.3, seconds: 0.25, release: -3),
+            .tap("tap open"),
+            .tap("tap close"),
+        ]
+        for round in 1...2 {
+            for step in steps {
+                await runPerfStep(step, round: round)
+                try? await Task.sleep(nanoseconds: 400_000_000)
+            }
+        }
+        // Leave the drawer as it was.
+        settling = nil; dragReveal = nil; showLevels = originallyShown
+        UserDefaults.standard.set(originallyShown, forKey: Self.levelsKey)
+        perfSelfTest = false
+        FrameMeter.log.notice("PERF self-test done")
+        print("PERF self-test done")
+    }
+
+    private func runPerfStep(_ step: PerfStep, round: Int) async {
+        meter.start()
+        _ = await meter.nextFrame()
+        switch step {
+        case let .drag(name, from, to, seconds, release):
+            let start = await meter.nextFrame()
+            while true {
+                let now = await meter.nextFrame()
+                let t = min((now - start) / seconds, 1)
+                let eased = t * t * (3 - 2 * t)
+                var exact = Transaction()
+                exact.disablesAnimations = true
+                withTransaction(exact) { settling = nil; dragReveal = from + (to - from) * eased }
+                if t >= 1 { break }
+            }
+            settle(open: to > 0.5 || (to > 1 && from < 1), velocity: release)
+            while settling != nil { _ = await meter.nextFrame() }
+            meter.stop("\(name) #\(round)")
+        case let .tap(name):
+            setLevels(!showLevels)
+            while settling != nil { _ = await meter.nextFrame() }
+            meter.stop("\(name) #\(round)")
         }
     }
+    #endif
 
     private func setLevels(_ visible: Bool) {
         guard visible != showLevels else { return }
+        #if DEBUG && os(iOS)
+        if !perfSelfTest { lastGesture = visible ? "tap open" : "tap close"; meter.start() }
+        #endif
         settle(open: visible)
     }
 
     /// Springs the panel to rest from where it is now, at `velocity` (progress per second).
     private func settle(open: Bool, velocity: Double = 0) {
         let from = reveal(at: Date())
-        if open != showLevels { feedback += 1 }
+        #if DEBUG && os(iOS)
+        let quiet = perfSelfTest
+        #else
+        let quiet = false
+        #endif
+        if open != showLevels && !quiet { feedback += 1 }
         showLevels = open
         dragReveal = nil
         settling = RevealSettle(start: Date(), from: from, to: open ? 1 : 0, velocity: velocity, bounce: reduceMotion ? 0 : 0.3)
@@ -390,6 +480,9 @@ struct LevelsSection: View {
         DragGesture(minimumDistance: 4, coordinateSpace: .global)
             .updating($handleTouched) { _, touched, _ in touched = true }
             .onChanged { value in
+                #if DEBUG && os(iOS)
+                if !meter.isRunning && !perfSelfTest { lastGesture = "finger drag"; meter.start() }
+                #endif
                 // A drag that starts mid-spring picks the panel up exactly where it is.
                 let progress = levelsDrag.progress(from: reveal(at: Date()), dy: value.translation.height, height: panelHeight)
                 var exact = Transaction()
@@ -433,11 +526,14 @@ struct LevelsDrawer<Handle: View, Panel: View>: View, Animatable {
                 .onGeometryChange(for: Double.self) { $0.size.height } action: { [stretch = geometry.stretch] height in
                     onMeasure(height - stretch)
                 }
-                // Slides up with the handle from behind the buttons. No scale: re-rendering the
-                // glass at a new size every frame made the drag stutter.
+                // Rises into place and fades in. No scale: re-rendering the glass at a new size
+                // every frame made the drag stutter.
+                .offset(y: (1 - geometry.progress) * RevealGeometry.rise)
                 .opacity(min(1, geometry.progress * 1.5))
                 .frame(height: geometry.space + geometry.stretch, alignment: .top)
-                .clipShape(BottomEdgeClip())
+                // Its lower edge dissolves into the dark while it appears, instead of a hard cut;
+                // fully open, nothing is masked.
+                .mask(alignment: .top) { SoftBottomMask(fade: RevealGeometry.fade * (1 - geometry.progress)) }
                 .allowsHitTesting(geometry.progress > 0.99)
                 .accessibilityHidden(geometry.progress < 0.99)
         }

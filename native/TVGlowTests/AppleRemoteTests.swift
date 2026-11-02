@@ -86,6 +86,34 @@ final class LevelDragTests: XCTestCase {
     }
 }
 
+final class FrameStatsTests: XCTestCase {
+    func testSteady120HzIsAllOnTime() {
+        let stats = FrameStats(intervals: Array(repeating: 1 / 120, count: 120))
+        XCTAssertEqual(stats.fps, 120, accuracy: 0.01)
+        XCTAssertEqual(stats.onTime, 1)
+        XCTAssertEqual(stats.dropped, 0)
+        XCTAssertEqual(stats.hitches, 0)
+        XCTAssertEqual(stats.worstMs, 1000 / 120, accuracy: 0.001)
+    }
+
+    func testSixtyHzCountsEveryOtherRefreshAsDropped() {
+        let stats = FrameStats(intervals: Array(repeating: 1 / 60, count: 60))
+        XCTAssertEqual(stats.fps, 60, accuracy: 0.01)
+        XCTAssertEqual(stats.onTime, 0)
+        XCTAssertEqual(stats.dropped, 60)
+        XCTAssertEqual(stats.hitches, 60)
+    }
+
+    func testOneLongFrameShowsAsAHitch() {
+        let stats = FrameStats(intervals: Array(repeating: 1 / 120, count: 99) + [4 / 120])
+        XCTAssertEqual(stats.dropped, 3)
+        XCTAssertEqual(stats.hitches, 1)
+        XCTAssertEqual(stats.worstMs, 4000 / 120, accuracy: 0.001)
+        XCTAssertEqual(stats.onTime, 0.99, accuracy: 0.0001)
+        XCTAssertEqual(FrameStats(intervals: []), FrameStats())
+    }
+}
+
 final class RevealDragTests: XCTestCase {
     func testSettleCarriesTheFlickIntoTheRubberBandAndSpringsBack() {
         let start = Date()

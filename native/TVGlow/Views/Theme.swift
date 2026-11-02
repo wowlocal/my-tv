@@ -159,11 +159,18 @@ struct GrabberChevron: Shape {
     }
 }
 
-/// Clips only the bottom edge, so a panel can be cut off as it slides behind the buttons
-/// while its glass edge and shadow still show at the sides.
-struct BottomEdgeClip: Shape {
-    func path(in rect: CGRect) -> Path {
-        Path(CGRect(x: rect.minX - 40, y: rect.minY - 40, width: rect.width + 80, height: rect.height + 40))
+/// Shows a panel down to the bottom of its space, with the last `fade` points dissolving into
+/// the dark rather than a hard cut. The sides and top stay open for the glass edge and shadow.
+struct SoftBottomMask: View {
+    var fade: Double
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Color.black
+            LinearGradient(colors: [.black, .black.opacity(0)], startPoint: .top, endPoint: .bottom)
+                .frame(height: max(0, fade))
+        }
+        .padding(.horizontal, -40).padding(.top, -40)
     }
 }
 

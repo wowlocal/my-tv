@@ -118,6 +118,10 @@ struct RevealDrag {
 struct RevealGeometry {
     static let stretchLimit = 44.0
     static let dropLimit = 28.0
+    /// How far below its place the panel starts as it appears; it rises as it opens.
+    static let rise = 14.0
+    /// Height of the soft, dissolving lower edge while the panel appears (none when fully open).
+    static let fade = 30.0
     /// 0…1, how much of the panel is shown.
     let progress: Double
     /// Height the panel takes up in the layout, excluding stretch.
